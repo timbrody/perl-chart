@@ -1,0 +1,1527 @@
+Contents
+1 Description                  2
+2 Chart::Base                  5
+3 Chart::Bars                 13
+4 Chart::Composite            15
+5 Chart::Direction            18
+6 Chart::ErrorBars            21
+7 Chart::HorizontalBars       23
+8 Chart::Lines                25
+9 Chart::LinesPoints          27
+10 Chart::Mountain            30
+11 Chart::Pareto              32
+12 Chart::Pie                 34
+13 Chart::Points              36
+14 Chart::Split               38
+15 Chart::StackedBars         41
+
+
+
+
+                          1
+
+1   Description
+SYNOPSIS
+
+use Chart::type;     (type is one of: Bars, Composite,
+Direction, ErrorBars, HorizontalBars, Lines, LinesPoints,
+Mountain,Pareto, Pie, Points, Split or StackedBars)
+
+$obj = Chart::type->new;
+$obj = Chart::type->new (width, height);
+
+$obj->set( $key_1, $val_1, ... , $key_n, $val_n);
+$obj->set( $key_1 => $val_1, ... , $key_n => $val_n);
+$obj->set( %hash );
+
+#GifGraph.pm-style API to produce png formatted charts
+@data = ( \@x_tick_labels, \@dataset_1, ... \@datase_n);
+$obj->png ( "filename", \@data );
+$obj->png ( $filehandle, \@data );
+$obj->png ( FILEHANDLE, \@data );
+$obj->cgi_png ();
+
+#Graph.pm-style API
+$obj->add_pt ($label, $val_1, ... $val_n);
+$obj->add_dataset ($val_1, ..., $val_n);
+$obj->png ("filename");
+$obj->png ($filehandle);
+$obj->png (FILEHANDLE);
+$obj->cgi_png();
+The similar functions are available for jpeg
+
+#Retrieve imagemap information
+$obj->set('imagemap' => 'true' );
+$imagemap_ref = $obj->imagemap_dump();
+
+
+
+
+                                2
+
+    The Perl module Chart creates png or jpeg Files with charts. Chart can
+also create dynamic charts for web sites.
+    It is possible to create a lot of dierent chart types with Chart: Bars,
+Composite, Direction, ErrorBars, HorizontalBars, Lines, LinesPoints, Moun-
+tain, Pareto, Pie, Points, Split and StackedBars.
+    Take a look at their descriptions to see how they work. All of the spe-
+cial types are classes by themselves. All these classes have the same abstract
+superclass: Base.pm. The hierarchy of Chart is shown in Figure 1.
+
+
+
+
+                       Figure 1: The hierarchy of chart
+    Therefore, you have to create an instance of one of the subclasses ,to
+get a chart ob ject.
+    All of the methods and most of the options chart provides are implemented
+in Base. But the drawing of the graph itself happens in the respective subclass.
+Figure 2 shows the elements of an chart ob ject.
+
+
+
+
+                         Figure 2: Elements of a chart
+   The graph area in the middle is drawn by the subclass, all other elements are
+drawn by Base. But some classes don't need all of these elements or need special
+elements. Those elements have to be over written in the respective class. For
+example, the class Pie doesn't need axes, so the methods for drawing the axes
+
+                                       3
+
+in Base.pm are over written by methods in Pie.pm; the draw nothing in this
+case. Furthermore the legend in a pie chart are a little bit dierent. Therefore
+Pie.pm has its own methods for drawing the legends. These rules are managed
+by Chart. You don't have to attend to it.
+    Chart uses Lincoln Stein's GD module for all its graphics primitives calls.
+So you need a installed version of GD.pm to use Chart. This module is like
+Chart available in the CPAN online archive at http://www.cpan.org/ .
+
+
+
+
+                                      4
+
+2    Chart::Base
+Name: Chart::Base
+
+File: Base.pm
+
+Requires: GD, Carp, FileHandle
+
+                  Base is the abstract superclass of the modules: Bars,
+Description:
+Composite, Direction, ErrorBars, HorizontalBars, Lines, LinesPoints, Moun-
+tain, Pareto, Pie, Points, Split, StackedBars.
+    The class Base provides all public methods and most of the attributs of a
+chart ob ject.
+    Constructor: An instance of a chart ob ject can be created with the
+constructor new():
+    $ob j = Chart::          ->new();
+                      Type
+    $ob j = Chart::          ->new( width ,            );
+                      Type                    height
+    Type means the type of chart it returns, i.e. Chart::Bars returns a chart
+with bars.
+    If new has no arguments, the constructor returns an ob ject with the size
+300x400 pixels. If new has two arguments width and height , it returns a chart
+ob ject with the desired size.
+   Methods:
+   $ob j->add_dataset(@array);
+$ob j->add_dataset(n@array_ref );
+Adds a dataset to the ob ject. The parameter is an array or a reference to an
+array. Generally the rst added array are interpreted by chart as the x-tick
+labels. The following arrays should include the data points. For example if the
+rst call with an bars ob ject is
+
+$obj->add_dataset('Harry', 'Sal ly'); and the second call is
+$obj->add_dataset(5, 8);
+
+then chart will draw a picture with two bars and label them with Harry and
+Sally.
+
+Some modules handle it a little bit dierent. Look at the respective description
+of the module to get more information.
+There are also dierences if you want to use the xy_plot option, to create a
+xy-graph.
+
+
+$ob j->add_pt(@array);
+$ob j->add_pt(n@array_ref );
+This is another method to add data to a chart ob ject. An argument can be
+an array or a reference to an array. If you use this method, chart wants the
+complete data of one data point.
+
+                                       5
+
+For example
+
+$obj->add_pt('Harry', 5);
+$obj->add_pt('Sal ly', 8);
+
+would create the same graph as the example for add_dataset.
+
+
+$ob j->add_datale( "le", type );
+$ob j->add_datale( $lehandle, type );
+This method adds a complete data le to the chart ob ject.
+Type can be 'set' or 'pt'. If the parameter is 'set' then one line in the data le
+has to be a complete data set. The values of the set has to be separated by
+whitespaces. For Example the le looks like this:
+
+Harry Sally
+38
+21
+
+If the parameter is 'pt' the lines of the le have to look like the parameter
+arrays of the add_pt method. Which means the line includes all values of one
+data point, also separated by whitespaces. For Example:
+
+Harry 3 2
+Sally 8 1
+
+
+$ob j->get_data();
+If you want a copy of the data that has been added so far, make a call to the
+get_data method like so:
+
+$dataref = $obj->get_data();
+
+It returns a reference to an array of references to datasets. For Example, you
+can get the x-tick labels this way:
+@x_labels = @{$dataref->[0]};
+
+
+$ob j->clear_data();
+This is the method to remove all data that may have been entered before.
+
+
+$ob j->set( attribut 1 => value 1 , ... , attribute n => value n );
+$ob j->set( %hash );
+$ob j->set( attribut 1 , value 1 , ... , attribute n , value n );
+$ob j->set( @array );
+Use this method to change the attributes of the chart ob ject. Set looks for a
+
+                                       6
+
+hash of keys and values or an array of keys and values.
+For Example
+
+$obj->set( 'title' => 'The title of the image');
+
+would set the title. The same job would do:
+
+%hash = ('title' => 'The title of the image');
+$obj->set( %hash);
+
+
+$ob j->png(    "le" );
+$ob j->png(    $lehandle );
+$ob j->png(    FILEHANDLE );
+$ob j->png(    "le", n@data );
+This method creates the png le. The le parameter can be, the le name, a
+reference to a lehandle or a lehandle itself. If the le doesn't exist, chart will
+create a le for you. If there is already a le, chart will overwrite this le.
+You can also add the data to the chart ob ject in the png method. The @data
+array should contain references to arrays of data, with the rst array reference
+pointing to an array with x-tick labels. @data could look like this:
+
+@data = (['Harry', 'Sal ly'], [5, 8], [50, 80]);
+
+This would set up an graph with two datasets, and three data points in these
+sets.
+
+
+$ob j->jpeg(   "le" );
+$ob j->jpeg(   $lehandle );
+$ob j->jpeg(   FILEHANDLE );
+$ob j->jpeg(   "le", n@data );
+These are the methods to create jpeg les. They work similar like the png()
+method.
+
+
+$ob j->cgi_png();
+$ob j->cgi_jpeg();
+With the cgi methods you can create dynamic images for your web site. The cgi
+methods will print the chart, along with the appropriate http header to stdout,
+allowing you to call chart-generating scripts directly from your html pages (ie.
+with a <img scr=image.pl>HTML tag).
+
+
+$ob j->imagemap_dump();
+Chart can also return the pixel positioning information so that you can create
+image maps from the les Chart generates. Simply set the 'imagemap' option
+
+                                          7
+
+to 'true' before you generate the le, then call the imagemap_dump method to
+retrieve the information. A structure will be returned almost identical to the
+@data array described above to pass the data into Chart.
+
+$imagemap_data = $obj->imagemap_dump();
+
+Instead of single data values, you will be passed references to arrays of pixel
+information. For Bars, HorizontalBars, Pareto and StackedBars charts, the ar-
+rays will contain two x-y pairs (specifying the upper left and the lower right
+corner of the bar), like so
+
+( $x1, $y1, $x2, $y2 ) = @{ $imagemap_data->[$dataset][$datapoint] };
+
+For Lines, Points, LinesPoints and Split, the arrays will contain a single xy-
+pair (specifying the center of the point), like so
+
+( $x, $y) = @{ $imagemap_data->[$dataset][$datapoint] };
+
+A few caveats apply here. First of all, Chart uses the GD-module by Lin-
+coln Stein to draw lines, circles, strings, and so on. GD treats the upper-left
+corner of the png/jpeg as the (0,0) point, so positives y values are measured
+from the top of the png/jpeg, not the bottom. Second, these values will mostly
+contain long decimal values. GD, of course, has to truncate these to single pixel
+values. In a worst-case scenario, this will result an error of one pixel on your
+imagemap. If this is really an issue, your only option is to experiment with it,
+or to contact Lincoln Stein and ask him. Third, please remember that the 0th
+dataset will be empty, since that's the place in the @data array for the data
+point labels.
+
+
+ Attributes/Options: These are the options which have eects on all types
+of chart:
+'transparent' Makes the background of the image transparent if set to 'true'.
+      Useful for making web page images. It doesn't work for all browsers.
+      Defaults to false.
+'png_border' Sets the number of pixels used as a border between the graph
+      and the edges of the png/jpeg. Defaults to 10.
+'graph_border' Sets the number of pixels used as a border between the ti-
+      tle/labels and the actual graph within the png/jpeg. Defaults to 10.
+'text_space' Sets the amount of space left on the sides of text, to make it
+      more readable. Defaults to 2.
+'title' Tells Chart what to use for the title of the graph. If empty, no title is
+      drawn. It recognizes 'nn' as a newline, and acts accordingly. Remember, if
+
+
+                                       8
+
+     you want to use normal quotation marks instead of single quotation marks
+     then you have to quote "`nnn"'. Default is empty.
+'sub_title' Writes a sub-title under the title in smaller letters.
+'x_label' Tells Chart what to use for the x-axis label. If empty, no label is
+     drawn. Default is empty.
+'y_label', 'y_label2' Tells Chart what to use for the y-axis labels. If empty,
+     no label is drawn. Default is empty.
+'legend' Species the placement of the legend. Valid values are 'left', 'right',
+     'top', 'bottom'. Setting this to 'none' tells chart not to draw a legend.
+     Default is 'right'.
+'legend_labels' Sets the values for the labels for the dierent datasets. Should
+     be assigned a reference to an array of labels. For example,
+
+     @labels = ('foo', 'bar');
+     $ob j->set ('legend_labels' => n@labels);
+
+     Default is empty, in which case 'Dataset 1', 'Dataset 2', etc. are used
+     as the labels.
+'tick_len' Sets the length of the x- and y-ticks in pixels. Default is 4.
+'x_ticks' Species how to draw the x-tick labels. Valid values are 'normal',
+     'staggered' (staggers the labels vertically), and 'vertical' (the labels are
+     draw upwards). Default is 'normal'.
+'min_y_ticks' Sets the minimum number of y_ticks to draw when generating
+     a scale. Default is 6, The minimum is 2.
+'max_y_ticks' Sets the maximum number of y_ticks to draw when gener-
+     ating a scale. Default is 100. This limit is used to avoid plotting an
+     unreasonably large number of ticks if non-round values are used for the
+     min_val and max_val.
+
+     The value for 'max_y_ticks' should be at least 5 times larger than 'min_y_ticks'.
+'max_x_ticks', 'min_x_ticks' Works similar as 'max_y_ticks' and 'min_y_ticks'.
+     Of course, it works only for xy-plots!
+'integer_ticks_only' Species how to draw the x- and y-ticks: as oating
+     point ('false', '0') or as integer numbers ('true', 1). If you want integer
+     ticks, it is maybe better to set the option 'precision' at zero. Default:
+     'false'
+'skip_int_ticks' If 'integer_ticks_only' was set to 'true' the labels and ticks
+     at the y-axis will be drawn every nth tick. Of course in HorizontalBars it
+     aects the x-axis. Default to 1, no skipping.
+
+                                       9
+
+'precision' Sets the number of numerals after the decimal point. Aects in
+     most cases the y-axis. But also the x-axis if 'xy_plot' is set and the labels
+     in a pie chart. Defaults to 3.
+'max_val' Sets the maximum y-value on the graph, overriding the normal
+     autoscaling. Does not work for a Split chart. Default is undef.
+'min_val' Sets the minimum y-value on the graph, overriding the normal au-
+     toscaling. Does not work for a Split chart. Default is undef.
+
+     Caution should be used when setting 'max_val' and 'min_val' to oat-
+     ing point or non-round numbers. This is because the scale must start &
+     end on a tick, ticks must have round-number intervals, and include round
+     numbers.
+
+     Example: Suppose your dataset has a range of 35-114 units, If you specify
+     them as the 'min_val' & 'max_val', The y_axis will be plot with 80 ticks
+     every 1 unit.. If no 'min_val' & 'max_val', the system will autoscale the
+     range to 30-120 with 10 ticks every 10 units.
+
+     If the 'min_val' & 'max_val' are specied to exesive precision, they may
+     be overiden by the system, plotting a maximum 'max_y_ticks' ticks.
+'include_zero' If 'true', forces the y-axis to include zero if it is not in the
+     dataset range. Default is 'false'.
+
+     In general, it is better to use this, than to set the 'min_val' if that is
+     all you want to achieve.
+'skip_x_ticks' Sets the number of x-ticks and x-tick labels to skip. (ie. if
+     'skip_x_ticks' was set to 4, Chart would draw every 4th x-tick and x-tick
+     label). Default is undef.
+'custom_x_ticks' This option allows you to specify exactly which x-ticks
+     and x-tick labels should be drawn. It should be assigned a reference to
+     an array of desired ticks. Just remember that I'm counting from the 0th
+     element of the array. (e.g., if 'custom_x_ticks' is assigned [0,3,4], then
+     the 0th, 3rd, and 4th x-ticks will be displayed) It doesn't work for Split,
+     HorizontalBars and Pie.
+'f_x_tick' Needs a reference to a function which uses the x-tick labels gener-
+     ated by the @data->[0] as the argument. The result of this function can
+     reformat the labels. For instance
+
+     $ob j -> set ('f_x_tick' => n&formatter );
+
+     An example for the function formatter: x labels are seconds since an event.
+     The referenced function can transform this seconds to hour, minutes and
+     seconds.
+
+                                          10
+
+'f_y_tick' The same situation as for 'f_x_tick' but now used for y labels.
+'colors' This option lets you control the colors the chart will use. It takes a
+     reference to a hash. The hash should contain keys mapped to references
+     to arrays of rgb values. For instance,
+
+     $ob j->set('colors' => 'background' => [255,255,255]);
+
+     sets the background color to white (which is the default). Valid keys
+     for this hash are
+
+     'background' (background color for the png)
+     'title' (color of the title)
+     'text' (all the text in the chart)
+     'x_label' (color of the x axis label)
+     'y_label' (color of the rst y axis label)
+     'y_label2' (color of the second y axis label)
+     'grid_lines' (color of the grid lines)
+     'x_grid_lines' (color of the x grid lines - for x axis ticks)
+     'y_grid_lines' (color of the y grid lines - for to left y axis ticks)
+     'y2_grid_lines' (color of the y2 grid lines - for right y axis ticks)
+     'dataset0'..'dataset63' (the dierent datasets)
+     'misc' (everything else, e.g. ticks, box around the legend)
+
+     NB. For composite charts, there is a limit of 8 datasets per component.
+     The colors for 'dataset8' through 'dataset15' become the colors for 'dataset0'
+     through 'dataset7' for the second component chart.
+'title_font' This option changes the font of the title. The key has to be a Gd
+     font. e.g. GD::Font->Large
+'label_font' This option changes the font of the labels. The key has to be a
+     Gd font.
+'legend_font' This option changes the font of the text of the legend. The key
+     has to be a Gd font.
+'tick_label_font' This option changes the font of the ticks. The key has to
+     be a Gd font.
+'grey_background' Puts a nice soft grey background on the actual data plot
+     when set to 'true'. Default is 'true'.
+'x_grid_lines' Draws grid lines matching up to x ticks if set to 'true'. Default
+     is 'false'.
+'y_grid_lines' Draws grid lines matching up to y ticks if set to 'true'. Default
+     is 'false'.
+'grid_lines' Draws grid lines matching up to x and y ticks if set to 'true'.
+     Default is 'false'.
+
+                                       11
+
+'imagemap' Lets Chart know you're going to ask for information about the
+     placement of the data for use in creating an image map from the png.
+     This information can be retrieved using the imagemap_dump() method.
+     NB. that the imagemap_dump() method cannot be called until after the
+     Chart has been generated (e.g. using the png() or cgi_png() methods).
+'ylabel2' The label for the right y-axis (the second component chart). Default
+     is undef.
+'no_cache' Adds Pragma: no-cache to the http header. Be careful with this
+     one, as Netscape 4.5 is unfriendly with POST using this method.
+'legend_example_size' Sets the length of the example line in the legend.
+     Defaults to 20.
+
+
+
+
+                                     12
+
+3    Chart::Bars
+Name: Chart::Bars
+
+File: Bars.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Bars is a subclass of Chart::Base.
+The class Bars creates a chart with bars.
+
+Example:
+
+
+
+
+                             Figure 3: Bars chart
+
+use Chart::Bars;
+
+$g = Chart::Bars->new(600,500);
+
+$g->add_dataset    ('Berlin',   'Paris', 'Rome', 'London', 'Munich');
+$g->add_dataset    (14, 5, 4,   5, 11);
+$g->add_dataset    (12, 4, 6,   7, 12);
+$g->add_dataset    (18, 2, 3,   3, 9);
+$g->add_dataset    (17, 5, 7,   6, 6);
+$g->add_dataset    (15, 3, 4,   5, 11);
+$g->add_dataset    (11, 6, 5,   6, 12);
+$g->add_dataset    (12, 1, 4,   5, 15);
+$g->add_dataset    (10, 4, 6,   8, 10);
+$g->add_dataset    (14, 5, 4,   5, 11);
+$g->add_dataset    (12, 4, 6,   6, 12);
+
+                                      13
+
+$g->add_dataset (18, 2, 3, 3, 9);
+$g->add_dataset (17, 5, 7, 2, 6);
+
+%hash = ('title' => 'Sold Cars in 2001',
+         'text_space' => 5,
+         'grey_background' => 'false',
+         'integer_ticks_only' => 'true',
+         'x_label' => 'City',
+         'y_label' => 'Number of Cars',
+         'legend' => 'bottom',
+         'legend_labels' => ['January' , 'February' , 'March', 'April',
+                             'May', 'June', 'July', 'August', 'September',
+                             'October', 'November', 'December'],
+         'min_val' => 0,
+         'max_val' => 20,
+         'grid_lines' =>'true',
+         'colors' => {'title' => 'red',
+                      'x_label' => 'blue',
+                      'y_label' => 'blue'} );
+
+$g->set (%hash);
+
+$g->png ("bars.png");
+
+
+Constructor: An instance of a bars chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Bars->new();
+$ob j = Chart::Bars->new( width ,                 );
+                                         height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+'spaced_bars' Leaves space between the groups of bars at each data point
+      when set to 'true'. This just makes it easier to read a bar chart. Default
+      is 'true'.
+
+
+
+
+                                        14
+
+4   Chart::Composite
+Name: Chart::Composite
+
+File: Composite.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Composite is a subclass of Chart::Base.
+The class Composite creates a two component chart with two types of chart.
+For example you can create a two component chart with bars and lines. Just
+set the option 'composite_info' ! A composite chart doesn't make sense with all
+types of chart. But it works pretty good with Lines, Points, LinesPoints and
+Bars.
+
+Example:
+
+
+
+
+                          Figure 4: Composite chart
+
+use Chart::Composite;
+
+$g = Chart::Composite->new;
+
+$g->add_dataset    (1 , 2, 3, 4, 5, 6);
+$g->add_dataset    (0.1, 0.2, 0.3, 0.2, 0.4, 0.1);
+$g->add_dataset    (0.3, 0.5, 0.2, 0.6, 0.7, 0.4);
+$g->add_dataset    (10, 11, 6, 7, 7, 8);
+
+$g->set('title' => 'Composite Chart',
+        'composite_info' => [ ['Bars', [1,2]],
+                               ['LinesPoints', [3]] ] );
+$g->set( 'include_zero' => 'true');
+
+                                      15
+
+$g->png("composite.png");
+Constructor: An instance of a Composite ob ject can be created with the
+constructor new():
+$ob j = Chart::Composite->new();
+$ob j = Chart::Composite->new( width ,                  );
+                                               height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universal valid options, see page 8.
+   The following options are also available:
+'composite_info' This option is only used for composite charts. It contains
+     the information about which types to use for the two component charts,
+     and which datasets belong to which component chart. It should be a
+     reference to an array of array references, containing information like the
+     following
+     $ob j->set ('composite_info' => [ ['Bars', [1,2]], ['Lines', [3,4] ] ]);
+
+     This example would set the two component charts to be a bar chart and
+     a line chart. It would use the rst two data sets for the bar chart (note
+     that the numbering starts at 1, not zero like most of the other numbered
+     things in Chart), and the second two data sets for the line chart. The
+     default is undef.
+
+     NB. Chart::Composite can only do two component charts.
+'min_val1', 'min_val2' Only for composite charts, these options specify the
+     minimum y-value for the rst and second components respectively. Both
+     default to undef.
+'max_val1', 'max_val2' Only for composite charts, these options specify the
+     maximum y-value for the rst and second components respectively. Both
+     default to undef.
+'y_ticks1', 'y_ticks2' The number of y ticks to use on the rst and second
+     y-axis on a composite chart. Please note that if you just set the 'y_ticks'
+     option, both axes will use that number of y ticks. Both default to undef.
+'f_y_tick1', 'f_y_tick2' Needs a reference to a funktion which uses the y-
+     tick labels for the rst and second y-axis generatet by the @data->[0] as
+     the argument. The result of this function can reformat the labels. For
+     instance
+
+
+                                      16
+
+     $obj -> set ('f_y_tick1') => n&formatter1 );
+     $ob j -> set ('f_y_tick2') => n&formatter2 );
+
+'same_y_axes' Forces both component charts in a composite chart to use
+     the same maximum and minimum y-values if set to 'true'. This helps to
+     keep the composite charts from being too confusing. Default is undef.
+'legend_example_height' Only for composite charts. These option changes
+     the thickness of the lines in the legend. If 'legend_example_height' ist
+     set to 'true'the thickness of all 'legend-lines' can be changed. Default is
+     false.
+
+     $ob j -> set ('legend_exapmle_height' => 'true');
+     $ob j -> set ('legend_example_height0' => '3');
+     $ob j -> set ('legned_example_height1..4'=> '10');
+
+     This example would set the thickness of the rst line in the legend to
+     3, and the thickness of the following 4 lines to 10. The Defaultvalues of
+     the individual datasets (use the same order as in 'composite_info') are
+     one, which means a 'normal' line is drawn. It is not possible to change
+     a 'legend_example_height#'(# means a datasetnumber)which was once
+     dened. The rst value remains.
+
+
+
+
+                                      17
+
+5    Chart::Direction
+Name: Chart::Direction
+
+File: Direction.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Direction is a subclass of Chart::Base.
+The class Direction creates a diagram for polar coordinates.
+Direction plots data, which is specied by angle (eg. wind direction) and value
+(eg. wind strength).
+The rst dataset to add is always a set of angels in degress. The second set is
+a set of values. The right adding of following datasets depends on the option
+'pairs'.
+Direction will draw a point chart if no value ist set to the option 'point'. You
+can also get a lines chart by turning the option 'point' to 'false' and the option
+'line' to 'true'. If you want a linespoint chart, then 'point' and 'line' has to be
+'true'. Additionally chart plots arrows from the center to the point or to the
+end of the line, if the option 'arrow' is set to 'true'.
+
+Example:
+
+
+
+
+                            Figure 5: Direction chart
+
+use Chart::Direction;
+$g = Chart::Direction->new(500,500);
+
+
+
+                                        18
+
+$g->add_dataset( 0, 100, 50, 200, 280, 310);
+$g->add_dataset(30, 40, 20, 35, 45, 20);
+
+$g->add_dataset(10, 110, 60, 210, 290, 320);
+$g->add_dataset(30, 40, 20, 35, 45, 20);
+
+$g->add_dataset(20, 120, 70, 220, 300, 330);
+$g->add_dataset(30, 40, 20, 35, 45, 20);
+
+%hash = ( 'title' => 'Direction Demo',
+          'angle_interval' => 45,
+          'precision' => 0,
+          'arrow' => 'true',
+          'point' => 'false',
+          'include_zero' => 'true',
+          'pairs' => 'true',
+          'legend' => 'none',
+          'grey_background' => 'false');
+
+$g->set(%hash);
+$g->png("Grafiken/vector.png");
+Constructor: An instance of a direction chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Direction->new();
+$ob j = Chart::Direction->new( width ,                   );
+                                                height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8, apart from
+the Options, that have eects on the axes, like 'custom_x_ticks', 'x_ticks' and
+so on. Also available, these special options:
+'point' Indicates to draw points, representing the data values. 'true' or 'false'
+      possible, per default 'true'.
+'line' Connects the points with lines if set to 'true'. Defaults to 'false'.
+'arrow' Draws an arrow from the center of the chart to the point, if set to
+      'true', per default 'false'.
+'pairs' This option tells Chart how to handle more datasets. If 'pairs' is set
+      to 'true', Chart uses the rst dataset as a set of degrees and the second
+      dataset as a set of values. Then, the third set is a set of degrees und the
+      fourth a set of values . . . .
+
+                                        19
+
+     If 'pairs' is set to 'false', Chart uses the rst dataset as a set of angels and
+     all following datasets as sets of values.
+     Defaults to 'false'.
+'angle_interval' This option tells Chart, how many angle lines should be
+     drawn. It is the dierence between two angle lines. The default value is
+     30, which means that a line will be drawn every 30 degrees. There are not
+     all values allowed. Valid Values are: 0, 5, 10, 15, 20, 30, 45 and 90. If you
+     choose 0, Chart will draw no line.
+
+'pt_size' Sets the radius of the points in pixels. Default is 18.
+'brush_size' Sets the width of the lines in pixels. Default is 6.
+'min_circles' Sets the minimum number of circles to draw when generating a
+     scale. Default is 4, the minimum is 2.
+'max_circles' Sets the maximum number of circles to draw when generating a
+     scale. Default is 100. This limit is used to avoid plotting an unreasonably
+     large number of ticks if non-round values are used for the min_val and
+     max_val.
+     The value for 'max_circles' should be at least 5 times larger than 'min_circles'.
+
+
+
+
+                                        20
+
+6    Chart::ErrorBars
+Name: Chart::ErrorBars
+
+File: ErrorBars.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: ErrorBars is a subclass of Chart::Base.
+The class ErrorBars creates a point chart with error bars.
+Chart expects the error values within the data array. By use of the add_dataset
+method the error values are the two next sets after the y values. The rst set
+after the y values has to be a set values for the upper error bars. The next set
+is an array of the down errors.
+If you want to use the same value for the up and down error, then you have to
+set the 'same_error' option to 'true'. In this case only one set after the y values
+is interpreted as a set of errors.
+Of course, it's also possible to use the add_pt method in a respective way.
+
+Example:
+
+
+
+
+                           Figure 6: Error bars chart
+
+use Chart::ErrorBars;
+$g = Chart::ErrorBars->new();
+
+#the x values
+$g->add_dataset(qw(1   1.1 1.2 1.3             1.4 1.5     1.6 1.7      1.8   1.9 2
+                   2.1 2.2 2.3 2.4             2.5));
+
+
+                                        21
+
+#the y values
+$g->add_dataset(qw(1          1.1 1.2 1.1     1.14 1.15 1.26 1.2 1.1        1.19 1.2
+                   1.4        1.6 2.0 2.5     3.1));
+#the up errors
+$g->add_dataset(qw(0.4        0.1 0.2   0.1 0.14 0.15 0.26 0.27 0.1 0.19 0.2
+                   0.1        0.1 0.2   0.1 0.3));
+#the down errors
+$g->add_dataset(qw(0.2        0.11 0.12 0.11 0.2 0.3          0.12 0.27 0.11 0.3 0.2
+                   0.2        0.2 0.1 0.1 0.2));
+
+$g->set( 'xy_plot' => 'true',
+         'precision' => 1,
+         'pt_size' =>10, 'brush_size' => 2,
+         'legend' => 'none',
+         'title' => 'Error Bars Demo',
+         'grid_lines' => 'true');
+
+$g->png("errorbars.png");
+Constructor: An instance of a error bars chart ob ject can be created with
+the constructor new():
+$ob j = Chart::ErrorBars->new();
+$ob j = Chart::ErrorBars->new( width ,                   );
+                                               height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able these special options:
+'same_error' Tells chart that you want to use the same error value of a data
+     point if set to true. Then you have to add just one set of error values.
+     Defaults to 'false'.
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+     and 'both'. Defaults to 'left'.
+'pt_size' Sets the radius of the points in pixels. Default is 18.
+'brush_size' Sets the width of the lines in pixels. Default is 6.
+'xy_plot' Forces Chart to plot a x-y-graph, which means that the x-axis is also
+     numeric if set to 'true'. Very useful for plots of mathematical functions.
+     Defaults to 'false'.
+'sort' Sorts the data of a x-y-graph ascending if set to 'true'. Should be set if
+     the added data isn't sorted. Defaults to 'false'.
+
+                                        22
+
+7    Chart::HorizontalBars
+Name: Chart::HorizontalBars
+
+File: HorizontalBars.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: HorizontalBars is a subclass of Chart::Base.
+The class HorizontalBars creates a chart with bars, that run horizontal.
+
+Example:
+
+
+
+
+                     Figure 7: Chart with horizontal bars
+
+use Chart::HorizontalBars;
+
+$g = Chart::HorizontalBars->new();
+$g->add_dataset ('Foo', 'bar', 'junk', 'ding', 'bat');
+$g->add_dataset (4, 3, 4, 2, 8);
+$g->add_dataset (2, 10, 3, 8, 3);
+
+%hash = ( 'title' => 'Horizontal Bars Demo',
+          'grid_lines' => 'true',
+          'x_label' => 'x-axis',
+          'y_label' => 'y-axis',
+          'include_zero' => 'true',
+          'x_ticks' => 'vertical',
+         );
+
+
+                                      23
+
+$g->set (%hash);
+
+$g->png ("hbars.png");
+Constructor: An instance of a HorizontalBars ob ject can be created with
+the constructor new():
+$ob j = Chart::HorizontalBars->new();
+$ob j = Chart::HorizontalBars->new( width ,                   );
+                                                     height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+'spaced_bars' Leaves space between the groups of bars at each data point
+      when set to 'true'. This just makes it easier to read a bar chart. Default
+      is 'true'.
+'skip_y_ticks' Does the same for the y-axis at a HorizontalBars chart as
+      'skip_x_ticks' does for other charts. Defaults to 1.
+
+
+
+
+                                        24
+
+8    Chart::Lines
+Name: Chart::Lines
+
+File: Lines.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Lines is a subclass of Chart::Base.
+The class Lines creates a lines chart.
+
+Example:
+
+
+
+
+                             Figure 8: Lines chart
+
+use Chart::Lines;
+
+$g = Chart::Lines->new();
+$g->add_dataset ('foo', 'bar', 'junk', 'ding', 'bat');
+$g->add_dataset ( -4, 3, -4, -5, -2);
+$g->add_dataset ( 2, 10, -3, 8, 3);
+$g->add_dataset (-10, 2, 4, -3, -3);
+$g->add_dataset ( 7, -5, -3, 4, 7);
+
+%hash = ('legend_labels' => ['1st Quarter', '2nd Quarter',
+                             '3rd Quarter', '4th Quarter'],
+         'y_axes' => 'both',
+         'title' => 'Lines Demo',
+         'grid_lines' => 'true',
+         'legend' => 'left',
+         'legend_example_size' => 20,
+         'colors' => {'text' => 'blue',
+                      'misc' => 'blue',
+                      'background' => 'grey',
+
+                                         25
+
+                           'grid_lines' => 'light_blue',
+                           'dataset0' => [220,0,0],
+                           'dataset1' => [200,0,100],
+                           'dataset2' => [150,50,175],
+                           'dataset3' => [170,0,255] },
+           );
+
+$g->set (%hash);
+
+$g->png ("lines.png");
+Constructor: An instance of a lines chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Lines->new();
+$ob j = Chart::Lines->new( width ,                    );
+                                             height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Special op-
+tions for this type of chart are:
+
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+'brush_size' Sets the width of the lines in pixels. Default is 6.
+'xy_plot' Forces Chart to plot a x-y-graph, which means that the x-axis is also
+      numeric if set to 'true'. Very useful for plots of mathematical functions.
+      Defaults to 'false'.
+'sort' Sorts the data of a x-y-graph ascending if set to 'true'. Should be set if
+      the added data isn't sorted. Defaults to 'false'.
+
+
+
+
+                                        26
+
+9    Chart::LinesPoints
+Name: Chart::LinesPoints
+
+File: LinesPoints.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: LinesPoints is a subclass of Chart::Base.
+The class LinesPoints creates a lines chart with points at the ends of the lines.
+
+Example:
+
+
+
+
+                          Figure 9: Linespoints chart
+
+use Chart::LinesPoints;
+use strict;
+
+my (@data1, @data2, @data4, @data3, @labels, %hash, $g);
+
+@labels = qw(1 2 3     456     789     10   11   12   13   14   15   16   17);
+@data1 = qw (-7 -5     -6 -8   -9 -7   -5   -4   -3   -2   -4   -6   -3   -5 -3   -4   -6);
+@data2 = qw (-1 -1     -1 -1   -2 -2   -3   -3   -4   -4   -6   -3   -2   -2 -2   -1   -1);
+@data3 = qw (-4 -4     -3 -2   -1 -1   -1   -2   -1   -1   -3   -2   -4   -3 -4   -2   -2);
+@data4 = qw (-6 -3     -2 -3   -3 -3   -2   -1   -2   -3   -1   -1   -1   -1 -1   -3   -3);
+
+$g = Chart::LinesPoints->new(600,300);
+$g->add_dataset(@labels);
+$g->add_dataset(@data1);
+$g->add_dataset(@data2);
+$g->add_dataset(@data3);
+$g->add_dataset(@data4);
+
+                                        27
+
+%hash =(
+            'integer_ticks_only' => 'true',
+            'title' => 'Soccer Season 2002\n ',
+            'legend_labels' => ['NY Soccer Club', 'Denver Tigers',
+                                'Houston Spacecats', 'Washington Presidents'],
+            'y_label' => 'position in the table',
+            'x_label' => 'day of play',
+            'grid_lines' => 'true',
+            'f_y_tick' => \&formatter,
+            );
+
+$g->set ( %hash);
+$g->png ("Grafiken/d_linesp2.png");
+
+#just a trick, to let the y scale start at the biggest point:
+#initiate with negative values, remove the minus sign!
+sub formatter {
+  my $label = shift;
+  $label = substr($label, 1,2);
+  return $label;
+}
+
+
+Constructor: An instance of a linespoints chart ob ject can be created with
+the constructor new():
+$ob j = Chart::LinesPoints->new();
+$ob j = Chart::LinesPoints->new( width ,                  );
+                                                 height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+     and 'both'. Defaults to 'left'.
+'pt_size' Sets the radius of the points in pixels. Default is 18.
+'brush_size' Sets the width of the lines in pixels. Default is 6.
+'xy_plot' Forces Chart to plot a x-y-graph, which means that the x-axis is also
+     numeric if set to 'true'. Very useful for plots of mathematical functions.
+     Defaults to 'false'.
+
+
+                                       28
+
+'sort' Sorts the data of a x-y-graph ascending if set to 'true'. Should be set if
+     the added data isn't sorted. Defaults to 'false'.
+
+
+
+
+                                       29
+
+10    Chart::Mountain
+Name: Chart::Mountain
+
+File: Mountain.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Mountain is a subclass of Chart::Base.
+The class Mountain creates a mountain chart.
+
+Example:
+
+
+
+
+                         Figure 10: Mountain chart
+
+use Chart::Mountain;
+
+$g = Chart::Mountain->new();
+
+@data = [ [1910, 1930, 1950, 1970],
+          [1, 3, 4, 2],
+          [2, 4, 3, 3],
+          [0.5, 1, 2, 1]];
+
+$g->set('title' => 'Mountain Chart',
+        'grid_lines' => 'false',
+        'precision' => 1);
+
+$g->png("mountain.png", @data);
+
+Constructor: An instance of a mountain chart ob ject can be created with
+the constructor new():
+
+                                    30
+
+$obj = Chart::Mountain->new();
+$ob j = Chart::Mountain->new( width ,                  );
+                                              height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+
+
+
+
+                                        31
+
+11    Chart::Pareto
+Name: Chart::Pareto
+
+File: Pareto.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Pareto is a subclass of Chart::Base.
+The class Pareto creates a pare-to chart. Pareto plots only one dataset and its
+labels.
+
+Example:
+
+
+
+
+                           Figure 11: Pare-to chart
+
+use Chart::Pareto;
+
+$g = Chart::Pareto->new(500,400);
+$g->add_dataset ('1st week', '2nd week', '3rd week', '4th week', '5th week',
+                 '6th week', '7th week', '8th week', '9th week', '10th week');
+$g->add_dataset (37, 15, 9 , 4, 3.5,
+                  2.1, 1.2, 1.5, 6.2, 16);
+
+
+
+                                      32
+
+%hash =( 'colors' => { 'dataset0' => 'mauve',
+                       'dataset1' => 'light_blue',
+                       'title' => 'orange'},
+         'title' => 'Visitors at the Picasso Exhibition',
+         'integer_ticks_only' => 'true',
+         'skip_int_ticks' => 5,
+         'grey_background' => 'false',
+         'max_val' => 100,
+         'y_label' => 'Visitors in Thousands',
+         'x_ticks' => 'vertical',
+         'spaced_bars' => 'true',
+         'legend' => 'none'
+        );
+
+$g->set (%hash);
+$g->png ("pareto.png");
+Constructor: An instance of a pare-to chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Pareto->new();
+$ob j = Chart::Pareto->new( width ,                   );
+                                             height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+'spaced_bars' Leaves space between bars at each data point when set to
+      'true'. This just makes it easier to read a bar chart. Default is 'true'.
+'sort' Sorts the data descending if set to 'true'. Defaults to 'false'.
+
+
+
+
+                                        33
+
+12    Chart::Pie
+Name: Chart::Pie
+
+File: Pie.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Pie is a subclass of Chart::Base.
+The class Pie creates a pie chart. The rst added set are the labels. The second
+set are the values.
+
+Example:
+
+
+
+
+                             Figure 12: Pie chart
+
+use Chart::Pie;
+
+$g = Chart::Pie->new();
+
+$g->add_dataset ('Har', 'Sug', 'Ert', 'Her', 'Tar', 'Kure');
+$g->add_dataset (12000, 20000 , 13000, 15000, 9000, 11000 );
+
+%opt = ( 'title' => 'Another Pie Demo Chart',
+         'label_values' => 'both',
+         'legend' => 'none',
+         'text_space' => 10,
+         'png_border' => 1,
+         'graph_border' => 0,
+         'colors' => { 'x_label' => 'red',
+                       'misc' => 'plum',
+                       'background' => 'grey',
+
+                                      34
+
+                        'dataset0'        =>   [120,   0, 255],
+                        'dataset1'        =>   [120,   100, 255],
+                        'dataset2'        =>   [120,   200, 255],
+                        'dataset3'        =>   [255,   100, 0],
+                        'dataset4'        =>   [255,   50, 0],
+                        'dataset5'        =>   [255,   0, 0],
+                      },
+          'x_label' => 'The Winner        is Team Blue!',
+         );
+
+$g->set (%opt);
+
+$g->png ("pie.png");
+Constructor: An instance of a pie chart ob ject can be created with the con-
+structor new():
+$ob j = Chart::Pie->new();
+$ob j = Chart::Pie->new( width ,                 );
+                                        height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'label_values' Tells the pie chart what labels to draw beside the pie. Valid
+      values are 'percent', 'value', 'both' and 'none'. Defaults to 'percent'.
+'legend_label_values' Tells the pie chart what labels to draw in the legend.
+      Valid values are 'percent', 'value', 'both' and 'none'. Defaults to 'value'.
+
+
+
+
+                                        35
+
+13    Chart::Points
+Name: Chart::Points
+
+File: Points.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Points is a subclass of Chart::Base.
+The class Points creates a point chart.
+
+Example:
+
+
+
+
+                            Figure 13: Points chart
+
+use Chart::Points;
+
+$g = Chart::Points->new();
+$g->add_dataset (1, 4, 3, 6, 2, 2.5); # x-coordinates
+$g->add_dataset (1, 5, 3, 2, 3, 3.2); # y-coordinates dataset 1
+$g->add_dataset (2, 6, 4.8, 1, 4, 4.2); # y-coordinates dataset 2
+
+@hash = ('title' => 'Points Chart',
+         'xy_plot' => 'true',
+         'x_ticks' => 'vertical',
+         'legend' => 'none',
+         'sort' => 'true',
+         'precision' => 3,
+         'include_zero' => 'true',
+ );
+
+$g->set (@hash);
+
+$g->png ("Grafiken/points.png");
+
+                                      36
+
+Constructor: An instance of a points chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Points->new();
+$ob j = Chart::Points->new( width ,                  );
+                                            height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+     and 'both'. Defaults to 'left'.
+'pt_size' Sets the radius of the points in pixels. Default is 18.
+'sort' Sorts the data of a x-y-graph ascending if set to 'true'. Should be set if
+     the added data isn't sorted. Defaults to 'false'.
+'xy_plot' Forces Chart to plot a x-y-graph, which means that the x-axis is also
+     numeric if set to 'true'. Very useful for plots of mathematical functions.
+     Defaults to 'false'.
+
+
+
+
+                                       37
+
+14    Chart::Split
+Name: Chart::Split
+
+File: Split.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: Split is a subclass of Chart::Base.
+The class Split creates a lines chart. Split makes always an xy-plot, which means
+that both axes are numeric. The x-axis will be split in several parts of a same
+interval (option 'interval' has to be set!). These intervals will be drawn one
+upon the other. The top interval starts at the start point, which has to be set
+by the programmer (option 'start').
+The rst passed dataset are the x coordinates. The following added sets are the
+y coordinates of the sets.
+Split draws only positive x-coordinates.
+The y-axis is a numbering of the intervals.
+The Split module is useful if you have a lot of data points to plot.
+
+Example:
+
+
+
+
+                             Figure 14: Split chart
+
+
+                                       38
+
+use Chart::Split;
+
+$g = Chart::Split->new(650 ,900);
+
+#get the data that are in a file and push them in arrays
+open( FILE , "data.dat") or die 'Can't open the data file!\n';
+while (defined ($line = <FILE>) ) {
+  ($x, $y,) = unpack("a11 x1 a8" , $line);
+   push (@y, $y);
+   push (@x, $x);
+}
+close (FILE);
+
+#add the data
+$g->add_dataset(@x);
+$g->add_dataset(@y);
+
+#set the options
+$g->set('xy_plot' => 'true');
+$g->set('legend' => 'none');
+$g->set('title' => 'Split Demo');
+$g->set('interval' => 1/288);
+$g->set('interval_ticks' => 10);
+$g->set('start' => 260.5);
+$g->set('brush_size' => 1);
+$g->set('precision' => 4);
+$g->set('y_label' => '5 minutes interval');
+
+#give me a nice picture
+$g->png("split.png");
+Constructor: An instance of a split chart ob ject can be created with the
+constructor new():
+$ob j = Chart::Split->new();
+$ob j = Chart::Split->new( width ,                 );
+                                          height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'start' Required value for a split chart. If the x coordinate of the rst data
+      point is zero, you should set start to zero. Sets the start value of the rst
+      interval. Defaults to undef.
+
+                                       39
+
+'interval' Required value of a split chart. Sets the interval of one line to
+     plot. Defaults to undef.
+'interval_ticks' Sets the number of ticks for the x-axis. Defaults to 5.
+'scale' Every y-value of a split chart will be multiplied with that value, but
+     the scale won't change. Which means that split allows to overdraw cer-
+     tain rows! Only useful if you want to give prominence to the maximal
+     amplitudes of the data. Defaults to 1.
+'sort' Sorts the data ascending if set to 'true'. Should be set if the added data
+     isn't sorted. Defaults to 'false'.
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+     and 'both'. Defaults to 'left'.
+
+
+
+
+                                          40
+
+15    Chart::StackedBars
+Name: Chart::StackedBars
+
+File: StackedBars.pm
+
+Requires: Chart::Base, GD, Carp, FileHandle
+
+Description: StackedBars is a subclass of Chart::Base.
+The class StackedBars creates a chart with stacked bars.
+
+Example:
+
+
+
+
+                       Figure 15: Chart with stacked bars
+
+use Chart::StackedBars;
+
+$g = Chart::StackedBars->new;
+
+$g->add_dataset      ('foo', 'bar', 'junk', 'taco', 'karp');
+$g->add_dataset      (3, 4, 9, 10, 11);
+$g->add_dataset      (8, 6, 1, 12, 1);
+$g->add_dataset      (5, 7, 2, 13, 4);
+
+$g->set ('title' => 'Stacked Bar Chart');
+$g->set('y_grid_lines' => 'true');
+$g->set('legend' => 'bottom');
+
+$g->png ("Grafiken/stackedbars.png");
+Constructor: An instance of a stacked bars ob ject can be created with the
+constructor new():
+
+                                      41
+
+$obj = Chart::StackedBars->new();
+$ob j = Chart::StackedBars->new( width ,                  );
+                                                 height
+
+If new has no arguments, the constructor returns an image with the size
+300x400 pixels. If new has two arguments width and height , it returns an
+image with the desired size.
+
+Methods: All universally valid methods, see page 5: Chart::Base.
+
+Attributes/Options: All universally valid options, see page 8. Also avail-
+able, these special options:
+'y_axes' Tells chart where to place the y-axis. Valid values are 'left', 'right'
+      and 'both'. Defaults to 'left'.
+'spaced_bars' Leaves space between the groups of bars at each data point
+      when set to 'true'. This just makes it easier to read a bar chart. Default
+      is 'true'.
+
+
+
+
+                                        42
+
+List of Figures
+  1    The hierarchy of chart . .      .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .    3
+  2    Elements of a chart . . . .     .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .    3
+  3    Bars chart . . . . . . . . .    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   13
+  4    Composite chart . . . . .       .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   15
+  5    Direction chart . . . . . .     .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   18
+  6    Error bars chart . . . . . .    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   21
+  7    Chart with horizontal bars      .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   23
+  8    Lines chart . . . . . . . .     .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   25
+  9    Linespoints chart . . . . .     .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   27
+  10   Mountain chart . . . . . .      .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   30
+  11   Pare-to chart . . . . . . .     .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   32
+  12   Pie chart . . . . . . . . . .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   34
+  13   Points chart . . . . . . . .    .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   36
+  14   Split chart . . . . . . . . .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   38
+  15   Chart with stacked bars .       .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   .   41
+
+
+
+
+                                           43
+
+Index
+Chart::Base, 5
+Lincoln Stein's GD module, 4
+
+
+
+
+                               44
+
