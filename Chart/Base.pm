@@ -964,6 +964,7 @@ sub _set_colors {
   my $self = shift;
   
   my $index = $self->_color_role_to_index('background'); # allocate GD color
+  $self->{'gd_obj'}->fill(0,0,$index);
   if ( $self->{'transparent'} ) {
     $self->{'gd_obj'}->transparent($index);
   }
