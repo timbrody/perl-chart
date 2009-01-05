@@ -46,7 +46,10 @@ sub set {
   $self->SUPER::set(%opts);
   
   # store the options they gave us to pass onto subs
-  $self->{'opts'} = \%opts;
+  while(my( $key, $value ) = each %opts)
+  {
+	  $self->{'opts'}->{$key} = $value;
+  }
 
   # now return
   return;
@@ -245,6 +248,10 @@ sub _split_data {
 	  $self->{'sub_'.$i}{'pointStyle'.($k+1)}
 	    = $self->{'pointStyle'.$j};
 	  # data
+	  if( !defined $self->{'dataref'}[$j] )
+	  {
+		  croak "composite_info refers to non-existent dataset $j (".(@{$self->{'dataref'}}-1)." datasets defined)";
+	  }
       push @ref, $self->{'dataref'}[$j];
 	  $k++;
     }
