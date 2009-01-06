@@ -685,6 +685,9 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   
   # default position for the y-axes
   $self->{y_axes} = 'left';
+
+  # use a logarithmic scale
+  $self->{y_axis_scale} = 'linear';
   
   # copies of the current values at the x-ticks function
   $self->{temp_x_min} = 0;
@@ -835,6 +838,20 @@ sub _check_data {
     if (scalar(@{$self->{'dataref'}[$_]}) > $self->{'num_datapoints'}) {
       $self->{'num_datapoints'} = scalar(@{$self->{'dataref'}[$_]});
     }
+  }
+
+  if( $self->{y_axis_scale} eq "log" )
+  {
+	  foreach my $series (@{$self->{'dataref'}}[1..$self->{num_datasets}])
+	  {
+		  for(@$series)
+		  {
+			  $_ = (defined $_ && $_ > 0) ?
+			  		log($_)/log(10) :
+					undef;
+		  }
+	  }
+	  $self->{f_y_tick} = sub { sprintf("%.2f", 10 ** $_[0] ) };
   }
 
   # find good min and max y-values for the plot

@@ -215,6 +215,15 @@ sub _split_data {
   if (defined ($self->{'opts'}{'f_y_tick2'})) {
     $self->{'sub_1'}->set ('f_y_tick' => $self->{'opts'}{'f_y_tick2'});
   }
+  foreach my $setting (qw( y_axis_scale ))
+  {
+	  if( defined $self->{opts}->{"${setting}1"} ) {
+		  $self->{'sub_0'}->set( $setting => $self->{opts}->{"${setting}1"} );
+	  }
+	  if( defined $self->{opts}->{"${setting}2"} ) {
+		  $self->{'sub_1'}->set( $setting => $self->{opts}->{"${setting}2"} );
+	  }
+  }
 
   # replace the gd_obj fields
   $self->{'sub_0'}->{'gd_obj'} = $self->{'gd_obj'};

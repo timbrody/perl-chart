@@ -94,7 +94,7 @@ sub handler
 	}
 
 	# settings
-	for( qw( legend same_y_axes min_val min_val1 min_val2 max_val1 max_val2 ) )
+	for( qw( legend same_y_axes min_val min_val1 min_val2 max_val1 max_val2 y_axis_scale y_axis_scale1 y_axis_scale2 ) )
 	{
 		if( defined $q->param( $_ ) )
 		{
