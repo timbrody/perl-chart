@@ -1771,8 +1771,9 @@ sub _gd_line_aa {
 
 sub _gd_rectangle {
 	my $self = shift;
-	$self->{'gd_obj'}->setThickness($self->{'line_size'});
-	$self->{'gd_obj'}->rectangle(@_);
+	return if defined $_[5] && $_[5] == 0;
+	$self->{'gd_obj'}->setThickness(defined $_[5] ? $_[5] : $self->{'line_size'});
+	$self->{'gd_obj'}->rectangle(@_[0..4]);
 	$self->{'gd_obj'}->setThickness(1);
 }
 

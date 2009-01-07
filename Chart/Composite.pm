@@ -435,15 +435,38 @@ sub _draw_x_ticks {
   # get the delta value, figure out how to draw the labels
   $width = $x2 - $x1;
   $delta = $width / ( $self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1 );
-  if ($delta <= $self->{'x_tick_label_width'}) {
-    unless ($self->{'x_ticks'} =~ /^vertical$/i) {
-      $self->{'x_ticks'} = 'staggered';
-    }
+#  if ($delta <= $self->{'x_tick_label_width'}) {
+#    unless ($self->{'x_ticks'} =~ /^vertical$/i) {
+#      $self->{'x_ticks'} = 'staggered';
+#    }
+#  }
+
+  if ( ! defined($self->{'skip_x_ticks'}) ) {
+     $self->{'skip_x_ticks'} = 1;
+  } elsif ( $self->{'skip_x_ticks'} == 0 ) {
+     $self->{'skip_x_ticks'} = 1;
+  }
+
+  # Change to staggered if the labels would overlap in 'normal' mode
+  if( $self->{'x_ticks'} =~ /^normal$/i ) {
+      my ($label_need,$label_got);
+      if( $self->{'custom_x_ticks'} && @{$self->{'custom_x_ticks'}} ) {
+          $label_got = $width/@{$self->{'custom_x_ticks'}};
+      } elsif( $self->{'num_datapoints'} > 0 ) {
+          $label_got = $width/$self->{'num_datapoints'};
+      } else {
+          $label_got = $width;
+      }
+      $label_need = $self->{'x_tick_label_width'} / $self->{'skip_x_ticks'};
+print STDERR "$label_got:$label_need\n";
+      if( $label_got <= $label_need ) {
+        $self->{'x_ticks'} = 'staggered';
+      }
   }
 
   # now draw the labels
   if ($self->{'x_ticks'} =~ /^normal$/i) { # normal ticks
-    if ($self->{'skip_x_ticks'}) {
+    if ($self->{'skip_x_ticks'} > 1) {
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         $x2 = $x1 + ($delta/2) + ($delta*($_*$self->{'skip_x_ticks'})) 
 	      - $self->_gd_string_width($font,$self->{'f_x_tick'}->($data->[0][$_* $self->{'skip_x_ticks'}])) / 2;
@@ -466,7 +489,7 @@ sub _draw_x_ticks {
     }
   }
   elsif ($self->{'x_ticks'} =~ /^staggered$/i) { # staggered ticks
-    if ($self->{'skip_x_ticks'}) {
+    if ($self->{'skip_x_ticks'} > 1) {
       $stag = 0;
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         $x2 = $x1 + ($delta/2) + ($delta*($_*$self->{'skip_x_ticks'})) 
@@ -511,7 +534,7 @@ sub _draw_x_ticks {
   }
   elsif ($self->{'x_ticks'} =~ /^vertical$/i) { # vertical ticks
     $y1 = $self->{'curr_y_max'} - $self->{'text_space'};
-    if ( defined($self->{'skip_x_ticks'}) && $self->{'skip_x_ticks'} > 1) {
+    if ( $self->{'skip_x_ticks'} > 1 ) {
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         $x2 = $x1 + ($delta/2) + ($delta*($_*$self->{'skip_x_ticks'})) - $h/2;
         $y2 = $y1 - ($self->{'x_tick_label_width'} 
@@ -556,7 +579,7 @@ sub _draw_x_ticks {
   # now plot the ticks
   $y1 = $self->{'curr_y_max'};
   $y2 = $self->{'curr_y_max'} - $self->{'tick_len'};
-  if ($self->{'skip_x_ticks'}) {
+  if ($self->{'skip_x_ticks'} > 1) {
     for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
       $x2 = $x1 + ($delta/2) + ($delta*($_*$self->{'skip_x_ticks'}));
       $self->_gd_line($x2, $y1, $x2, $y2, $misccolor);

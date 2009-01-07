@@ -87,6 +87,9 @@ sub _draw_data {
 	  }
   }
  
+  my $bar_border_size = $self->{'bar_border_size'};
+  $bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
+
   # init the imagemap data field if they wanted it
   if ($self->{'imagemap'}) {
     $self->{'imagemap_data'} = [];
@@ -182,7 +185,6 @@ sub _draw_data {
 	## algorithm is lame
 	my $value = &{$self->{'f_y_tick'}}($data->[$i][$j] - $zero_offset->[$i-1]);
 	my ($w,$h) = $self->_gd_string_dimensions($font,$value);
-#	if ($data->[$i][$j] > 0) {
 	if( $y3 <= $y2 ) {
 	  $self->{'gd_obj'}->filledRectangle ($x2, $y3, $x3, $y2, $color);
 	  if ($self->{'imagemap'}) {
@@ -210,13 +212,11 @@ sub _draw_data {
 	  }
 	}
 
-        # now outline it. outline red if the bar had been cut off
-    unless ($cut){
-	  $self->_gd_rectangle ($x2, $y3, $x3, $y2, $misccolor);
-    }
-    else {
+    # now outline it. outline red if the bar had been cut off
+    if( $cut )
+	{
       $pink = $self->{'gd_obj'}->colorAllocate(255,0,255);
-      $self->_gd_rectangle ($x2, $y3, $x3, $y2, $pink);
+      $self->_gd_rectangle ($x2, $y3, $x3, $y2, $pink, $bar_border_size);
 	  # Line through the bar to indicate it's been cut off
 	  $self->{'gd_obj'}->setThickness(int(($x3-$x2)/3) || 1);
 	  my $up = $y2 > $y3 ? 1 : -1;
@@ -224,6 +224,10 @@ sub _draw_data {
 	  $self->{'gd_obj'}->line ($x2, int(($y3+$y2)/2)+$up*($x3-$x2), $x3, int(($y3+$y2)/2), $white);
 	  $self->{'gd_obj'}->setThickness(1);
     }
+	else
+	{
+	  $self->_gd_rectangle ($x2, $y3, $x3, $y2, $misccolor, $bar_border_size);
+	}
    }
   }
   

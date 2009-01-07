@@ -79,27 +79,47 @@ sub handler
 		push @{$composite_types[$composite_index{$type}]->[1]}, $_+1;
 	}
 	
+	# chart size (in pixels)
+	my $width = $q->param( "width" ) || 400;
+	my $height = $q->param( "height" ) || 300;
+	
+	$width = 400 if $width =~ /\D/ or $width < 0 or $width > 1024;
+	$height = 300 if $height =~ /\D/ or $height < 0 or $height > 1024;
+	
 	my $chart;
 
 	if( $#composite_types == 0 )
 	{
 		my $type = $composite_types[0][0];
 		$type = "Chart::$type";
-		$chart = $type->new( 400, 300 );
+		$chart = $type->new( $width, $height );
 	}
 	else
 	{
-		$chart = Chart::Composite->new( 400, 300 );
+		$chart = Chart::Composite->new( $width, $height );
 		$chart->set( "composite_info", \@composite_types );
 	}
 
 	# settings
-	for( qw( legend same_y_axes min_val min_val1 min_val2 max_val1 max_val2 y_axis_scale y_axis_scale1 y_axis_scale2 ) )
+	for( qw( legend same_y_axes min_val min_val1 min_val2 max_val1 max_val2 y_axis_scale y_axis_scale1 y_axis_scale2 brush_size bar_border_size title ) )
 	{
 		if( defined $q->param( $_ ) )
 		{
 			$chart->set( $_, $q->param( $_ ) );
 		}
+	}
+
+	my @custom_x_ticks;
+	for(my $i = 0; $i < @labels; ++$i)
+	{
+		if( $labels[$i] ne "" )
+		{
+			push @custom_x_ticks, $i;
+		}
+	}
+	if( @custom_x_ticks < @labels )
+	{
+		$chart->set( custom_x_ticks => \@custom_x_ticks );
 	}
 
 	$chart->set( "legend_labels", \@series_labels );
