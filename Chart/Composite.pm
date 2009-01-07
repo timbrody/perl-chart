@@ -458,7 +458,6 @@ sub _draw_x_ticks {
           $label_got = $width;
       }
       $label_need = $self->{'x_tick_label_width'} / $self->{'skip_x_ticks'};
-print STDERR "$label_got:$label_need\n";
       if( $label_got <= $label_need ) {
         $self->{'x_ticks'} = 'staggered';
       }
