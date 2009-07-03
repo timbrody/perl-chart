@@ -41,26 +41,86 @@ _draw_y_grid_lines does plot all lines now
 
 =cut
 
-use strict;
-use warnings;
-
-use GD;
-use GD::Polygon;
 use Carp;
-use FileHandle;
 use Math::Trig;
+use Exporter;
+use GD::Polygon;
 
-$Chart::Base::VERSION = '2.4';
+use Chart::Render;
+use FileHandle;
 
-use vars qw(%named_colors $MAX_DATASET_COLORS);
+use vars qw( $VERSION @ISA @EXPORT );
+
+$VERSION = '3.0';
+
+@ISA = qw( Exporter );
 
 # FIXME Vertical TT isn't correct
-use constant PI => 4 * atan2(1, 1);
-use constant ANGLE_VERTICAL => (90 / 360) * (2 * PI);
 use constant DEBUG => 0;
-use constant TRUE => 1;
-use constant FALSE => 0;
-use constant GD_ARC_FILLED => 1;
+use constant {
+	ANGLE_VERTICAL => (270 / 360) * (2 * pi),
+	TRUE => 1,
+	FALSE => 0,
+	GD_ARC_FILLED => 1,
+};
+
+@EXPORT = qw( ANGLE_VERTICAL TRUE FALSE );
+
+use vars qw(%NAMED_COLORS $MAX_DATASET_COLORS);
+
+%NAMED_COLORS = (
+  'white'		=> [255,255,255],
+  'black'		=> [0,0,0],
+  'red'			=> [200,0,0],
+  'green'		=> [0,175,0],
+  'blue'		=> [0,0,200],
+  'orange'		=> [250,125,0],
+  'orange2'		=> [238,154,0],
+  'orange3'		=> [205,133,0],
+  'orange4'		=> [139,90,0],
+  'yellow'		=> [225,225,0],
+  'purple'		=> [200,0,200],
+  'light_blue'		=> [0,125,250],
+  'light_green'		=> [125,250,0],
+  'light_purple'	=> [145,0,250],
+  'pink'		=> [250,0,125],
+  'peach'		=> [250,125,125],
+  'olive'		=> [125,125,0],
+  'plum'		=> [125,0,125],
+  'turquoise'		=> [0,125,125],
+  'mauve'		=> [200,125,125],
+  'brown'		=> [160,80,0],
+  'grey'		=> [225,225,225],
+  'gray'		=> [225,225,225],
+  'HotPink'             => [255,105,180],
+  'PaleGreen1'          => [154,255,154],
+  'PaleGreen2'          => [144,238,144],
+  'PaleGreen3'          => [124,205,124],
+  'PaleGreen4'          => [84,138,84],
+  'DarkBlue'            => [0,0,139],
+  'BlueViolet'          => [138,43,226],
+  'PeachPuff'           => [255,218,185],
+  'PeachPuff1'          => [255,218,185],
+  'PeachPuff2'          => [238,203,173],
+  'PeachPuff3'          => [205,175,149],
+  'PeachPuff4'          => [139,119,101],
+  'chocolate1'          => [255,127,36], 
+  'chocolate2'          => [238,118,33], 
+  'chocolate3'          => [205,102,29], 
+  'chocolate4'          => [139,69,19],
+  'LightGreen'          => [144,238,144],
+  'lavender'            => [230,230,250],
+  'MediumPurple'        => [147,112,219],
+  'DarkOrange'          => [255,127,0],
+  'DarkOrange2'         => [238,118,0],
+  'DarkOrange3'         => [205,102,0],
+  'DarkOrange4'         => [139,69,0],
+  'SlateBlue'           => [106,90,205],
+  'BlueViolet'          => [138,43,226],
+  'RoyalBlue'           => [65,105,225],
+);
+
+use strict;
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
@@ -249,6 +309,9 @@ sub png {
           "but it wasn't a filename or a filehandle.\n";
   }
 
+	# initialise the drawing surface
+	$self->_init_surface( "png" );
+
   # allocate the background color
   $self->_set_colors();
 
@@ -266,7 +329,7 @@ sub png {
   # to be nice to the poor ppl using nt
   binmode $fh;
 
-  print $fh $self->{'gd_obj'}->png();
+  print $fh $self->{'surface'}->render();
   
   # now exit
   return 1;
@@ -469,6 +532,33 @@ sub make_gd {
   return $self->{'gd_obj'};
 }
 
+sub _init_surface
+{
+	my( $self, $format ) = @_;
+
+	$self->{'surface'} = Chart::Render->new( $format, $self->{width}, $self->{height} );
+}
+
+=item $chart->svg( $file [, $dataref ] )
+
+Render the chart to $file in SVG format.
+
+=cut
+
+sub svg
+{
+	my( $self, $file, $dataref ) = @_;
+
+	$self->_init_surface( "svg" );
+
+	$self->_copy_data( $dataref );
+
+	$self->_check_data( $dataref );
+
+	$self->_draw();
+
+	$self->{'surface'}->svg( $file );
+}
 
 ##  get the information to turn the chart into an imagemap
 sub imagemap_dump {
@@ -552,8 +642,11 @@ sub _init {
   my $x = shift || 400;  # give them a 400x300 image
   my $y = shift || 300;  # unless they say otherwise
   
+  $self->{width} = $x;
+  $self->{height} = $y;
+
   # get the gd object
-  $self->{'gd_obj'} = GD::Image->new($x, $y, @_); # Pass other options to GD
+  #$self->{'gd_obj'} = GD::Image->new($x, $y, @_); # Pass other options to GD
 
   # start keeping track of used space
   $self->{'curr_y_min'} = 0;
@@ -577,20 +670,24 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   $self->{'legend_space'} = 4;
   
   # set some default fonts
-  $self->{'title_font'} = gdLargeFont;
-  $self->{'sub_title_font'} = gdLargeFont;
-  $self->{'legend_font'} = gdSmallFont;
-  $self->{'label_font'} = gdMediumBoldFont;
-  $self->{'tick_label_font'} = gdSmallFont;
-  $self->{'series_label_font'} = gdSmallFont;
+  $self->{'fonts_default_spec'} = {
+	  title => 'Sans-Serif',
+	  sub_title => 'Sans-Serif',
+	  legend => 'Sans-Serif',
+	  label => 'Sans-Serif',
+	  tick_label => 'Sans-Serif',
+	  series_label => 'Sans-Serif',
+  };
 
   # set some default sizes
-  $self->{'title_font_size'} = 14;
-  $self->{'sub_title_font_size'} = 12;
-  $self->{'legend_font_size'} = 10;
-  $self->{'label_font_size'} = 11;
-  $self->{'tick_label_font_size'} = 10;
-  $self->{'series_label_font_size'} = 10;
+  $self->{'font_sizes_default_spec'} = {
+	  title => 14,
+	  sub_title => 12,
+	  legend => 10,
+	  label => 11,
+	  tick_label => 10,
+	  series_label => 10,
+  };
 
   # put the legend on the bottom of the chart
   $self->{'legend'} = 'right';
@@ -618,11 +715,11 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   # no patterns
   $self->{'patterns'} = undef;
 
-  # let the lines in Chart::Lines be 6 pixels wide
-  $self->{'brush_size'} = 6;
+  # let the lines in Chart::Lines be 3 pixels wide
+  $self->{'brush_size'} = -3;
 
   # default thickness for all other lines
-  $self->{'line_size'} = 1;
+  $self->{'line_size'} = -1;
 
   # let the points in Chart::Points and Chart::LinesPoints be 18 pixels wide
   $self->{'pt_size'} = 18;
@@ -759,7 +856,7 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
     grid_lines	=> 'black',
     grey_background => 'grey',
     (map { ('dataset'.$d => $_, 'neg_dataset'.$d++ => $_) }
-		qw (red green blue purple peach orange mauve olive pink light_purple light_blue plum yellow turquoise light_green brown 
+		qw( red green blue purple peach orange mauve olive pink light_purple light_blue plum yellow turquoise light_green brown 
 		HotPink PaleGreen1 DarkBlue BlueViolet orange2 chocolate1 LightGreen pink light_purple light_blue plum yellow turquoise light_green brown 
 		pink PaleGreen2 MediumPurple PeachPuff1 orange3 chocolate2 olive pink light_purple light_blue plum yellow turquoise light_green brown 
 		DarkOrange PaleGreen3 SlateBlue BlueViolet PeachPuff2 orange4 chocolate3 LightGreen pink light_purple light_blue plum yellow turquoise light_green brown) ),
@@ -814,7 +911,7 @@ sub _copy_data {
 ##  and collect some basic info about it
 sub _check_data {
   my $self = shift;
-  my $font = 'tick_label_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
   my $length = 0;
 
   # first make sure there's something there
@@ -862,7 +959,7 @@ sub _check_data {
   $self->{'x_tick_label_height'} = 0;
   for (@{$self->{'dataref'}->[0]}) {
         next if !defined($_);
-		my ($w,$h) = $self->_gd_string_dimensions($font,$self->{f_x_tick}->($_));
+		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$self->{f_x_tick}->($_));
         $self->{'x_tick_label_width'} = $w if $w > $self->{'x_tick_label_width'};
         $self->{'x_tick_label_height'} = $h if $h > $self->{'x_tick_label_height'};
   }
@@ -923,103 +1020,89 @@ warn "_draw: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   return 1;
 }
 
+sub _font_role_to_font
+{
+	my( $self, $role ) = @_;
 
-%named_colors = (
-  'white'		=> [255,255,255],
-  'black'		=> [0,0,0],
-  'red'			=> [200,0,0],
-  'green'		=> [0,175,0],
-  'blue'		=> [0,0,200],
-  'orange'		=> [250,125,0],
-  'orange2'		=> [238,154,0],
-  'orange3'		=> [205,133,0],
-  'orange4'		=> [139,90,0],
-  'yellow'		=> [225,225,0],
-  'purple'		=> [200,0,200],
-  'light_blue'		=> [0,125,250],
-  'light_green'		=> [125,250,0],
-  'light_purple'	=> [145,0,250],
-  'pink'		=> [250,0,125],
-  'peach'		=> [250,125,125],
-  'olive'		=> [125,125,0],
-  'plum'		=> [125,0,125],
-  'turquoise'		=> [0,125,125],
-  'mauve'		=> [200,125,125],
-  'brown'		=> [160,80,0],
-  'grey'		=> [225,225,225],
-  'gray'		=> [225,225,225],
-  'HotPink'             => [255,105,180],
-  'PaleGreen1'          => [154,255,154],
-  'PaleGreen2'          => [144,238,144],
-  'PaleGreen3'          => [124,205,124],
-  'PaleGreen4'          => [84,138,84],
-  'DarkBlue'            => [0,0,139],
-  'BlueViolet'          => [138,43,226],
-  'PeachPuff'           => [255,218,185],
-  'PeachPuff1'          => [255,218,185],
-  'PeachPuff2'          => [238,203,173],
-  'PeachPuff3'          => [205,175,149],
-  'PeachPuff4'          => [139,119,101],
-  'chocolate1'          => [255,127,36], 
-  'chocolate2'          => [238,118,33], 
-  'chocolate3'          => [205,102,29], 
-  'chocolate4'          => [139,69,19],
-  'LightGreen'          => [144,238,144],
-  'lavender'            => [230,230,250],
-  'MediumPurple'        => [147,112,219],
-  'DarkOrange'          => [255,127,0],
-  'DarkOrange2'         => [238,118,0],
-  'DarkOrange3'         => [205,102,0],
-  'DarkOrange4'         => [139,69,0],
-  'SlateBlue'           => [106,90,205],
-  'BlueViolet'          => [138,43,226],
-  'RoyalBlue'           => [65,105,225],
-);
+	my $size = $self->{'font_sizes'}->{$role}
+		|| $self->{'font_sizes_default_spec'}->{$role};
+
+	my $family = $self->{'fonts'}->{$role}
+		|| $self->{'fonts_default_spec'}->{$role};
+
+	if( !defined $family )
+	{
+		Carp::confess "No role '$role' available in font specs";
+	}
+
+	return wantarray ? ($family, $size) : $family;
+}
 
 ##  specify my colors
 sub _set_colors {
   my $self = shift;
   
-  my $index = $self->_color_role_to_index('background'); # allocate GD color
-  $self->{'gd_obj'}->fill(0,0,$index);
-  if ( $self->{'transparent'} ) {
-    $self->{'gd_obj'}->transparent($index);
+  if( !$self->{'transparent'} )
+  {
+	  my $color = $self->_color_role_to_rgb('background');
+	  $self->{'surface'}->filled_rectangle( $color, 0, 0,0, $self->{width},$self->{height} );
   }
 }
 
-sub _color_role_to_index {
-    my $self = shift;
-    
-    # Return a (list of) color index(es) corresponding to the (list of) role(s) in @_.
-    my @result =  map {
-    my $role = $_;
-    my $index = $self->{'color_table'}->{$role};
-	return $index if defined $index;
-    
+sub _color_role_to_rgb
+{
+	my( $self, $role ) = @_;
+
 	# Wrap around the dataset colours
 	if( $role =~ /^dataset(\d+)$/ && $1 > $MAX_DATASET_COLORS ) {
 		$role = 'dataset' . ($1 % $MAX_DATASET_COLORS);
 	}
-    my $spec = $self->{'colors'}->{$role} 
-       || $self->{'colors_default_spec'}->{$role}
-       || $self->{'colors_default_spec'}->{$self->{'colors_default_role'}->{$role}};
-          
-      
-    my @rgb = $self->_color_spec_to_rgb($role, $spec);
-        #print STDERR "spec = $spec\n";
-       
-    my $string = sprintf " RGB(%d,%d,%d)", map { $_ + 0 } @rgb;
-        
-    $index = $self->{'color_table'}->{$string};
-    unless ( defined $index ) {
-      $index = $self->{'gd_obj'}->colorAllocate(@rgb);
-      $self->{'color_table'}->{$string} = $index;
+
+	my $name = $self->{'colors'}->{$role} 
+	   || $self->{'colors_default_spec'}->{$role}
+	   || $self->{'colors_default_spec'}->{$self->{'colors_default_role'}->{$role}};
+
+	my @rgb = $self->_color_spec_to_rgb($role, $name);
+
+	return \@rgb;
+}
+
+# Return a (list of) color index(es) corresponding to the (list of) role(s)
+sub _color_role_to_index
+{
+	my( $self, @roles ) = @_;
+    
+	my @indexes;
+	foreach my $role (@roles)
+	{
+		my $index = $self->{'color_table'}->{$role};
+		return $index if defined $index;
+		
+		# Wrap around the dataset colours
+		if( $role =~ /^dataset(\d+)$/ && $1 > $MAX_DATASET_COLORS ) {
+			$role = 'dataset' . ($1 % $MAX_DATASET_COLORS);
+		}
+
+		my $spec = $self->{'colors'}->{$role} 
+		   || $self->{'colors_default_spec'}->{$role}
+		   || $self->{'colors_default_spec'}->{$self->{'colors_default_role'}->{$role}};
+			  
+		my @rgb = $self->_color_spec_to_rgb($role, $spec);
+			#print STDERR "spec = $spec\n";
+		   
+		my $string = sprintf " RGB(%d,%d,%d)", map { $_ * 255 } @rgb;
+		$index = $self->{'color_table'}->{$string};
+		if( !defined $index )
+		{
+		  $self->{'color_table'}->{$string} = $index;
+		}
+
+		$self->{'color_table'}->{$role} = $index;
+		push @indexes, $index;
     }
-    $self->{'color_table'}->{$role} = $index;
-	return $index;
-    } @_;
-    #print STDERR "Result= ".$result[0]."\n";
-    (wantarray && @_ > 1 ? @result : $result[0]);
+    #print STDERR "Result= ".$indexes[0]."\n";
+	
+    return (wantarray && @_ > 1 ? @indexes : $indexes[0]);
 }
       
 sub _color_spec_to_rgb {
@@ -1034,8 +1117,8 @@ sub _color_spec_to_rgb {
     }
     elsif ( !ref($spec) ) {
       croak "Unknown named color ($spec) for $role\n"
-        unless $named_colors{$spec};
-      @rgb = @{ $named_colors{$spec} };
+        unless $NAMED_COLORS{$spec};
+      @rgb = @{ $NAMED_COLORS{$spec} };
     }
     else {
       croak "Unrecognized color for $role\n";
@@ -1046,10 +1129,10 @@ sub _color_spec_to_rgb {
 ##  draw the title for the chart
 sub _draw_title {
   my $self = shift;
-  my $font = 'title_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'title' );
   my $color = defined $self->{'colors'}{'title'} ?
-      			$self->_color_role_to_index('title') :
-      			$self->_color_role_to_index('text');
+      			$self->_color_role_to_rgb('title') :
+      			$self->_color_role_to_rgb('text');
   my ($h, $w, @lines, $x, $y);
 
   # split the title into lines
@@ -1061,9 +1144,10 @@ sub _draw_title {
          + $self->{'curr_x_min'};
   $y = $self->{'curr_y_min'}; # There's nothing above title so no point adding text_space
   for(0..$#lines) {
-	  ($w,$h) = $self->_gd_string_dimensions($font,$lines[$_]);
-	  $self->_gd_string($color,$font,0,$x-$w/2,$y,$lines[$_]);
-	  $y = ($self->{'curr_y_min'} += $self->{'text_space'} + $h);
+	  ($w,$h) = $self->{'surface'}->string_bounds($font, $fsize, $lines[$_]);
+	  $y = ($self->{'curr_y_min'} += $h);
+	  $self->{'surface'}->string($color,$font,$fsize,$x-$w/2,$y,0,$lines[$_]);
+	  $y = ($self->{'curr_y_min'} += $self->{'text_space'});
   }
 
   # and return
@@ -1073,10 +1157,10 @@ sub _draw_title {
 ##  pesky backwards-compatible sub
 sub _draw_sub_title {
   my $self = shift;
-  my $font = 'sub_title_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'sub_title' );
   my $color = defined $self->{'colors'}{'sub_title'} ?
-      			$self->_color_role_to_index('sub_title') :
-      			$self->_color_role_to_index('text');
+      			$self->_color_role_to_rgb('sub_title') :
+      			$self->_color_role_to_rgb('text');
   my ($h, $w, @lines, $x, $y);
 
   # split the title into lines
@@ -1088,9 +1172,9 @@ sub _draw_sub_title {
          + $self->{'curr_x_min'};
   $y = ($self->{'curr_y_min'} += $self->{'text_space'});
   for(0..$#lines) {
-	  ($w,$h) = $self->_gd_string_dimensions($font,$lines[$_]);
-	  $self->_gd_string($color,$font,0,$x-$w/2,$y,$lines[$_]);
+	  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$lines[$_]);
 	  $y = ($self->{'curr_y_min'} += $self->{'text_space'} + $h);
+	  $self->{'surface'}->string($color,$font,$fsize,$x-$w/2,$y,0,$lines[$_]);
   }
 
   # and return
@@ -1120,7 +1204,7 @@ sub _sort_data {
 sub _find_x_scale {
     my $self = shift;
     my @data = @{$self->{'dataref'}};
-	my $font = 'tick_label_font';
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
     my ($i, $j);
     my ($d_min, $d_max);
     my ($p_min, $p_max, $f_min, $f_max);
@@ -1202,7 +1286,7 @@ sub _find_x_scale {
 #		push @tickLabels, $labelText; # TODO Wrong?
 		push @tickLabels, $labelNum;
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
-		my ($w,$h) = $self->_gd_string_dimensions($font,$labelText);
+		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelWidth = $w if $w > $maxtickLabelWidth;
 		$maxtickLabelHeight = $h if $h > $maxtickLabelHeight;
    }
@@ -1241,7 +1325,7 @@ sub _find_y_scale
 	my $self = shift;
 	
 	# Predeclare vars.
-	my $font = 'tick_label_font';
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
 	my ($d_min, $d_max);		# Dataset min & max.
 	my ($p_min, $p_max);		# Plot min & max.
 	my ($tickInterval, $tickCount, $skip);
@@ -1318,7 +1402,7 @@ sub _find_y_scale
 			}	
 			
 		push @tickLabels, $labelText;
-		my ($w,$h) = $self->_gd_string_dimensions($font,$labelText);
+		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
 		$maxtickLabelWidth = $w if $maxtickLabelWidth < $w;
 		$maxtickLabelHeight = $h if $maxtickLabelHeight < $h;
@@ -1405,7 +1489,7 @@ sub _find_y_scale
 			$labelText = sprintf("%.".$precision."f", $labelNum);
 		}
 		push @tickLabels, $labelText;
-		my ($w,$h) = $self->_gd_string_dimensions($font,$labelText);
+		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
 		$maxtickLabelWidth = $w if $maxtickLabelWidth < $w;
 		$maxtickLabelHeight = $h if $maxtickLabelHeight < $h;
@@ -1711,131 +1795,60 @@ warn "_plot: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   return 1;
 }
 
-# Algorithm to fill an arc (not in GD library ...)
-sub _gd_arc {
-	my($self,$x,$y,$w,$h,$s,$e,$color,$style) = @_;
-	my $gd = $self->{'gd_obj'};
-	$style ||= 0;
+sub string_width
+{
+	my( $self, $font, $size, $string ) = @_;
 
-	# Sanity check
-	return if $w < 0 or $h < 0;
+	my( $w, $h ) = $self->{'surface'}->string_bounds( $font, $size, $string );
 
-	my $p = new GD::Polygon;
+	return $w;
+}
 
-	# Make sure angles are positive and e > s
-	$s += 360 while $s < 0;
-	$e += 360 while $e < 0;
-	$e += 360 while $e < $s;
+sub string_height
+{
+	my( $self, $font, $size, $string ) = @_;
 
-	$s %= 360;
-	$e %= 360 if $e > 360;
+	my( $w, $h ) = $self->{'surface'}->string_bounds( $font, $size, $string );
 
-	# In the algorithm we need to use the radius
-	$w /= 2;
-	$h /= 2;
-
-	$s = deg2rad($s);
-	$e = $e == 360 ? pi*2 : deg2rad($e); # Otherwise $e goes to zero at 360
-
-	$p->addPt($x,$y);
-	my $inc = atan(1/$w); # degrees for .5 pixel difference
-	for(my $a = $s; $a <= $e; $a+=$inc){
-		$p->addPt($x + cos($a) * $w, $y + sin($a) * $h);
-	}
-
-	if( $style & GD_ARC_FILLED )
-	{
-		$gd->filledPolygon($p,$color);
-	}
-	else
-	{
-		$gd->polygon($p,$color);
-	}
+	return $h;
 }
 
 # Utility functions to set the correct line thickness before
 # we draw lines (i.e. so the user can easily create
 # a higher res chart)
 sub _gd_line {
-	my $self = shift;
-	$self->{'gd_obj'}->setThickness($self->{'line_size'});
-	$self->{'gd_obj'}->line(@_);
-	$self->{'gd_obj'}->setThickness(1);
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_line_aa {
-	my $self = shift;
-	$self->{'gd_obj'}->setAntiAliased(pop @_);
-	$self->{'gd_obj'}->line(@_, GD::gdAntiAliased);
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_rectangle {
-	my $self = shift;
-	return if defined $_[5] && $_[5] == 0;
-	$self->{'gd_obj'}->setThickness(defined $_[5] ? $_[5] : $self->{'line_size'});
-	$self->{'gd_obj'}->rectangle(@_[0..4]);
-	$self->{'gd_obj'}->setThickness(1);
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_string($$$$$$$) {
-	my ($self,$color,$field,$angle,$x,$y,$string) = @_;
-	my ($font,$size) = (
-		$self->{$field},
-		$self->{$field.'_size'},
-		);
-	unless( $font ) {
-		croak ref($self)."::_gd_string) font undefined / field ('$field') is not a valid font.";
-	}
-	unless( ref($font) eq 'GD::Font' || -e $font ) {
-		croak ref($self)."::_gd_string) $field must be either a GD Font or the location of a TrueType (ttf) font.";
-	}
-	if( ref($font) eq 'GD::Font' ) {
-		return ($angle == ANGLE_VERTICAL) ?
-			$self->{'gd_obj'}->stringUp($font,$x,$y,$string,$color) :
-			$self->{'gd_obj'}->string($font,$x,$y,$string,$color);
-	} else {
-		# Bizarrely stringFT seems to render upwards from $y, while
-		# string renders downwards from $y, so this is a hack to
-		# shift TrueType rendering to the same point
-		my ($w,$h,$offset) = $self->_gd_string_dimensions($field,$string);
-		return $self->{'gd_obj'}->stringFT($color,$font,$size,$angle,$x+sin($angle)*$h,$y+cos($angle)*$offset,$string);
-	}
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_string_width {
-	my ($w,$h) = _gd_string_dimensions(@_);
-	return $w || 0;
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_string_height {
-	my ($w,$h) = _gd_string_dimensions(@_);
-	return $h;
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 sub _gd_string_dimensions {
-	my ($self,$field,$string) = @_;
-	my ($font,$size) = (
-		$self->{$field},
-		$self->{$field.'_size'},
-		);
-	unless( defined($font) ) {
-		croak ref($self)."::_gd_string_dimensions) Internal Error: $field is not a defined font field.";
-	}
-	unless( ref($font) eq 'GD::Font' || -e $font ) {
-		croak ref($self)."::_gd_string_dimensions) $field must be either a GD::Font or the location of a TrueType (ttf) font.";
-	}
-	if( ref($font) eq 'GD::Font' ) {
-		return (length($string) * $font->width,$font->height);
-	}
-	my @bounds = GD::Image->stringFT(0,$font,$size,0,0,0,$string);
-	return ($bounds[2],$bounds[1]-$bounds[5],-1*$bounds[5]); # Height excludes below the base line
+	Carp::confess "Use of deprecated function ".(caller(0))[3];
 }
 
 ##  let them know what all the pretty colors mean
 sub _draw_legend {
   my $self = shift;
   my ($length,$height);
-  my $font = 'legend_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
   my ($axes_space,$x1,$x2);
 
   # check to see if legend type is none..
@@ -1859,7 +1872,7 @@ sub _draw_legend {
     unless ($self->{'legend_labels'}[$_-1]) {
       $self->{'legend_labels'}[$_-1] = "Dataset $_";
     }
-	($length,$height) = $self->_gd_string_dimensions('legend_font',$self->{'legend_labels'}[$_-1]);
+	($length,$height) = $self->{'surface'}->string_bounds($font,$fsize,$self->{'legend_labels'}[$_-1]);
     if ($length > $self->{'max_legend_label_width'}) {
       $self->{'max_legend_label_width'} = $length;
 	  $self->{'max_legend_label_height'} = $height;
@@ -1912,15 +1925,14 @@ sub _draw_legend {
   return 1;
 }
 
-
 ## put the legend on the bottom of the chart
 sub _draw_bottom_legend {
   my ($self,$x1,$x2) = @_;
   my @labels = @{$self->{'legend_labels'}};
   my ($y1, $x3, $y2, $empty_width, $max_label_width, $cols, $rows, $color, $brush);
   my ($col_width, $row_height, $r, $c, $index, $x, $y, $w, $h, $axes_space);
-  my $font = $self->{'legend_font'};
-  my $size = $self->{'legend_font_size'};
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+  my $line_size = $self->{'line_size'};
 
   # get the size of the font
   # ($h, $w) = ($font->height, $font->width);
@@ -1951,50 +1963,50 @@ sub _draw_bottom_legend {
   $y1 = $self->{'curr_y_max'} - $self->{'text_space'}
           - ($rows * $row_height) - (2 * $self->{'legend_space'});
   $y2 = $self->{'curr_y_max'};
-  $self->{'gd_obj'}->setThickness($self->{'line_size'});
-  $self->{'gd_obj'}->rectangle($x1, $y1, $x2, $y2, 
-                               $self->_color_role_to_index('misc'));
+  $self->{'surface'}->rectangle(
+		$self->_color_role_to_rgb('misc'),
+		$self->{'line_size'},
+  		$x1, $y1, $x2, $y2);
   $x1 += $self->{'legend_space'} + $self->{'text_space'};
   $x2 -= $self->{'legend_space'};
   $y1 += $self->{'legend_space'} + $self->{'text_space'};
   $y2 -= $self->{'legend_space'} + $self->{'text_space'};
 
   # draw in the actual legend
-  $self->{'gd_obj'}->setThickness($self->{'brush_size'});
   for $r (0..$rows-1) {
     for $c (0..$cols-1) {
       $index = ($r * $cols) + $c;  # find the index in the label array
       if ($labels[$index]) {
 	# get the color
-        $color = $self->_color_role_to_index('dataset'.$index); 
+        $color = $self->_color_role_to_rgb('dataset'.$index); 
 
         # get the x-y coordinate for the start of the example line
 		$x = $x1 + ($col_width * $c);
         $y = $y1 + ($row_height * $r) + $h/2;
 	
 		# now draw the example line
-        $self->{'gd_obj'}->line($x, $y, 
-                                $x + $self->{'legend_example_size'}, $y,
-                                $color);
+        $self->{'surface'}->line($color,
+								$self->{'brush_size'},
+								$x, $y, 
+                                $x + $self->{'legend_example_size'}, $y);
 
         # reset the brush for points
-        $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle'.($index+1)});
-        $self->{'gd_obj'}->setBrush($brush);
+#        $brush = $self->_prepare_brush($color, 'point',
+#				$self->{'pointStyle'.($index+1)});
+#        $self->{'gd_obj'}->setBrush($brush);
         # draw the point
         $x3 = int($x + $self->{'legend_example_size'}/2);
-        $self->{'gd_obj'}->line($x3, $y, $x3, $y, gdBrushed) if $self->{'pointStyle'.($index+1)};
+#        $self->{'surface'}->line( gdBrushed,$line_size,$x3, $y, $x3, $y) if $self->{'pointStyle'.($index+1)};
 
         # adjust the x-y coordinates for the start of the label
 		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-		$y -= $h/2;
+		$y += $h/2;
 
 		# now draw the label
-		$self->_gd_string($color, 'legend_font', 0, $x, $y, $labels[$index]);
+		$self->{'surface'}->string($color, $font, $fsize, $x, $y, 0, $labels[$index]);
       }
     }
   }
-  $self->{'gd_obj'}->setThickness(1);
 
 	# Mark off the space used
 	$self->{'curr_y_max'} -= ($rows * $row_height) + $self->{'text_space'}
@@ -2010,15 +2022,15 @@ sub _draw_right_legend {
   my $self = shift;
   my @labels = @{$self->{'legend_labels'}};
   my ($x1, $x2, $x3, $y1, $y2, $width, $color, $misccolor, $w, $h, $brush);
-  my $font = $self->{'legend_font'};
-  my $size = $self->{'legend_font_size'};
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+  my $line_size = $self->{'line_size'};
  
   # get the size of the font
   #($h, $w) = ($font->height, $font->width);
   $h = $self->{'max_legend_label_height'};
 
   # get the miscellaneous color
-  $misccolor = $self->_color_role_to_index('misc');
+  $misccolor = $self->_color_role_to_rgb('misc');
 
   # find out how wide the largest label is
   $width = (2 * $self->{'text_space'})
@@ -2035,9 +2047,7 @@ sub _draw_right_legend {
 	  + (2 * $self->{'legend_space'});
 
   # box the legend off
-  $self->{'gd_obj'}->setThickness($self->{'line_size'});
-  $self->{'gd_obj'}->rectangle ($x1, $y1, $x2, $y2, $misccolor);
-  $self->{'gd_obj'}->setThickness(1);
+  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
 
   # leave that nice space inside the legend box
   $x1 += $self->{'legend_space'};
@@ -2049,10 +2059,10 @@ sub _draw_right_legend {
     my $c = $self->{'num_datasets'}-$_-1;
     # color of the datasets in the legend
    # if ($self->{'dataref'}[1][0] < 0) {
-        $color = $self->_color_role_to_index('dataset'.$_);
+        $color = $self->_color_role_to_rgb('dataset'.$_);
    # }
    # else {	
-   #     $color = $self->_color_role_to_index('dataset'.$c);
+   #     $color = $self->_color_role_to_rgb('dataset'.$c);
    #}
 
     # find the x-y coords
@@ -2061,27 +2071,21 @@ sub _draw_right_legend {
     $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
 
     # do the line first
-    $self->{'gd_obj'}->line ($x2, $y2, $x3, $y2, $color);
+    $self->{'surface'}->line($color, $self->{'brush_size'}, $x2, $y2, $x3, $y2);
 
     # reset the brush for points
-    $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $_});
-    $self->{'gd_obj'}->setBrush($brush);
+#    $brush = $self->_prepare_brush($color, 'point',
+#				$self->{'pointStyle' . $_});
+#    $self->{'gd_obj'}->setBrush($brush);
     # draw the point
-    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-				int(($x3+$x2)/2), $y2, gdBrushed);
+#    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
+#				int(($x3+$x2)/2), $y2, gdBrushed);
 
     # now the label
     $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 -= $h/2;
+    $y2 += $h/2;
     # order of the datasets in the legend
-   # if ($self->{'dataref'}[1][0] <0) {
-   #    $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$_], $color);
-		$self->_gd_string($color, 'legend_font', 0, $x2, $y2, $labels[$_]);
-   # }
-   # else {
-   #     $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$c], $color);
-   # }
+	$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
   }
 
   # mark off the used space
@@ -2098,8 +2102,9 @@ sub _draw_top_legend {
   my @labels = @{$self->{'legend_labels'}};
   my ($y1, $x3, $y2, $empty_width, $max_label_width, $cols, $rows, $color, $brush);
   my ($col_width, $row_height, $r, $c, $index, $x, $y, $w, $h, $axes_space);
-  my $font = $self->{'legend_font'};
-  my $size = $self->{'legend_font_size'};
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+  my $line_size = $self->{'line_size'};
+  my $misccolor = $self->_color_role_to_rgb('misc');
 
   # get the size of the font
   # ($h, $w) = ($font->height, $font->width);
@@ -2130,10 +2135,7 @@ sub _draw_top_legend {
   $y1 = $self->{'curr_y_min'};
   $y2 = $self->{'curr_y_min'} + $self->{'text_space'}
           + ($rows * $row_height) + (2 * $self->{'legend_space'});
-  $self->{'gd_obj'}->setThickness($self->{'line_size'});
-  $self->{'gd_obj'}->rectangle($x1, $y1, $x2, $y2, 
-                               $self->_color_role_to_index('misc'));
-  $self->{'gd_obj'}->setThickness(1);
+  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
 
   # leave some space inside the legend
   $x1 += $self->{'legend_space'} + $self->{'text_space'};
@@ -2147,29 +2149,31 @@ sub _draw_top_legend {
       $index = ($r * $cols) + $c;  # find the index in the label array
       if ($labels[$index]) {
 	# get the color
-        $color = $self->_color_role_to_index('dataset'.$index); 
+        $color = $self->_color_role_to_rgb('dataset'.$index); 
         
 	# find the x-y coords
 	$x = $x1 + ($col_width * $c);
         $y = $y1 + ($row_height * $r) + $h/2;
 
 	# draw the line first
-        $self->{'gd_obj'}->line($x, $y, 
-                                $x + $self->{'legend_example_size'}, $y,
-                                $color);
+        $self->{'surface'}->line(
+			$color,
+			$self->{'brush_size'},
+			$x, $y, 
+			$x + $self->{'legend_example_size'}, $y);
 
         # reset the brush for points
-        $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $index});
-        $self->{'gd_obj'}->setBrush($brush);
+#        $brush = $self->_prepare_brush($color, 'point',
+#				$self->{'pointStyle' . $index});
+#        $self->{'gd_obj'}->setBrush($brush);
         # draw the point
-        $x3 = int($x + $self->{'legend_example_size'}/2);
-        $self->{'gd_obj'}->line($x3, $y, $x3, $y, gdBrushed);
+#        $x3 = int($x + $self->{'legend_example_size'}/2);
+#        $self->{'surface'}->line( gdBrushed,$line_size,$x3, $y, $x3, $y);
 
         # now the label
 		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-		$y -= $h/2;
-		$self->_gd_string($color, 'legend_font', 0, $x, $y, $labels[$index]);
+		$y += $h/2;
+		$self->{'surface'}->string($color, $font, $fsize, $x, $y, 0, $labels[$index]);
       }
     }
   }
@@ -2188,15 +2192,14 @@ sub _draw_left_legend {
   my $self = shift;
   my @labels = @{$self->{'legend_labels'}};
   my ($x1, $x2, $x3, $y1, $y2, $width, $color, $misccolor, $w, $h, $brush);
-  my $font = $self->{'legend_font'};
-  my $size = $self->{'legend_font_size'};
+  my( $font, $fsize ) = $self->_font_role_to_font( $self->{'legend'} );
  
   # get the size of the font
   #($h, $w) = ($font->height, $font->width);
   $h = $self->{'max_legend_label_height'};
 
   # get the miscellaneous color
-  $misccolor = $self->_color_role_to_index('misc');
+  $misccolor = $self->_color_role_to_rgb('misc');
 
   # find out how wide the largest label is
   $width = (2 * $self->{'text_space'})
@@ -2227,10 +2230,10 @@ sub _draw_left_legend {
     my $c = $self->{'num_datasets'}-$_-1;
     # color of the datasets in the legend
    # if ($self->{'dataref'}[1][0] <0) {
-        $color = $self->_color_role_to_index('dataset'.$_);
+        $color = $self->_color_role_to_rgb('dataset'.$_);
    # }
    # else {
-   #     $color = $self->_color_role_to_index('dataset'.$c);
+   #     $color = $self->_color_role_to_rgb('dataset'.$c);
    # }
 
     # find the x-y coords
@@ -2242,12 +2245,12 @@ sub _draw_left_legend {
     $self->{'gd_obj'}->line ($x2, $y2, $x3, $y2, $color);
 
     # reset the brush for points
-    $brush = $self->_prepare_brush($color, 'line',
-				$self->{'pointStyle' . $_});
-    $self->{'gd_obj'}->setBrush($brush);
+#    $brush = $self->_prepare_brush($color, 'line',
+#				$self->{'pointStyle' . $_});
+#    $self->{'gd_obj'}->setBrush($brush);
     # draw the point
-    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-				int(($x3+$x2)/2), $y2, gdBrushed);
+#    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
+#				int(($x3+$x2)/2), $y2, gdBrushed);
     
     # now the label
     $x2 = $x3 + (2 * $self->{'text_space'});
@@ -2255,7 +2258,7 @@ sub _draw_left_legend {
     # order of the datasets in the legend
    # if ($self->{'dataref'}[1][0] <0) {
    #    $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$_], $color);
-		$self->_gd_string($color, 'legend_font', 0, $x2, $y2, $labels[$_]);
+		$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
    # }
    # else {
    #     $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$c], $color);
@@ -2274,25 +2277,25 @@ sub _draw_left_legend {
 sub _draw_x_label {  
   my $self = shift;
   my $label = $self->{'x_label'};
-  my $font = 'label_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'label' );
   my $color;
   my ($w, $h, $x, $y);
 
   #get the right color
-  $color = $self->_color_role_to_index('x_label');
-  $color ||= $self->_color_role_to_index('text');
+  $color = $self->_color_role_to_rgb('x_label')
+	  || $self->_color_role_to_rgb('text');
   
   # get the size of the font
   #($h, $w) = ($font->height, $font->width);
-  ($w,$h) = $self->_gd_string_dimensions($font,$label);
+  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$label);
 
   # make sure it goes in the right place
   $x = ($self->{'curr_x_max'} - $self->{'curr_x_min'}) / 2
          + $self->{'curr_x_min'} - $w / 2;
-  $y = $self->{'curr_y_max'} - ($self->{'text_space'} + $h);
+  $y = $self->{'curr_y_max'} - $self->{'text_space'};
 
   # now write it
-  $self->_gd_string($color, $font, 0, $x, $y, $label);
+  $self->{'surface'}->string($color, $font, $fsize, $x, $y, 0, $label);
 
 print STDERR "_draw_x_label: curr_y_max=$self->{'curr_y_max'} => " if DEBUG;
 
@@ -2310,35 +2313,34 @@ warn "$self->{'curr_y_max'}" if DEBUG;
 sub _draw_y_label {
   my $self = shift;
   my $side = shift;
-  my $font = 'label_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'label' );
   my ($label, $w, $h, $x, $y, $color);
 
   # get the label
   if ($side eq 'left') {
     $label = $self->{'y_label'};
-    $color = $self->_color_role_to_index('y_label');
+    $color = $self->_color_role_to_rgb('y_label');
   }
   elsif ($side eq 'right') {
     $label = $self->{'y_label2'};
-    $color = $self->_color_role_to_index('y_label2');
+    $color = $self->_color_role_to_rgb('y_label2');
   }
 
-  # get the size of the font
-  #($h, $w) = ($font->height, $font->width);
-  ($w,$h) = $self->_gd_string_dimensions($font,$label);
+  # get the size of the label
+  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$label);
 
   # make sure it goes in the right place
   if ($side eq 'left') {
-    $x = $self->{'curr_x_min'} + $self->{'text_space'};
+    $x = $self->{'curr_x_min'} + $self->{'text_space'} + $h;
   }
   elsif ($side eq 'right') {
-    $x = $self->{'curr_x_max'} - $self->{'text_space'} - $h;
+    $x = $self->{'curr_x_max'} - $self->{'text_space'};
   }
   $y = ($self->{'curr_y_max'} - $self->{'curr_y_min'}) / 2
          + $self->{'curr_y_min'} + $w / 2;
 
   # write it
-  $self->_gd_string($color,$font,ANGLE_VERTICAL,$x,$y,$label);
+  $self->{'surface'}->string($color,$font,$fsize,$x,$y,ANGLE_VERTICAL,$label);
 
   # mark the space written to as used
   if ($side eq 'left') {
@@ -2375,9 +2377,10 @@ sub _draw_ticks {
 sub _draw_x_number_ticks {
  my $self = shift;
  my $data = $self->{'dataref'};
- my $font = 'tick_label_font';
- my $textcolor = $self->_color_role_to_index('text');
- my $misccolor = $self->_color_role_to_index('misc');
+ my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+  my $line_size = $self->{'line_size'};
+ my $textcolor = $self->_color_role_to_rgb('text');
+ my $misccolor = $self->_color_role_to_rgb('misc');
  my ($h, $w, $x1, $y1, ,$y2, $x2, $delta, $width, $label);
  my @labels = @{$self->{'x_tick_labels'}};
 
@@ -2409,7 +2412,7 @@ sub _draw_x_number_ticks {
   else {
 		# Make sure the last label can be printed
 		my $label = $self->{f_x_tick}->($data->[0][$#{$data->[0]}]);
-		my $need = $self->_gd_string_width($font,$label) / 2;
+		my $need = $self->string_width($font,$fsize,$label) / 2;
 		if( defined($self->{'graph_border'}) and $need > $self->{'graph_border'} )
 		{
 			$self->{'curr_x_max'} -= $need - $self->{'graph_border'};
@@ -2430,11 +2433,11 @@ sub _draw_x_number_ticks {
    #get the point for updating later
    $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - $h - $self->{'tick_len'};
    #get the start point
-   $y2 = $y1  + $self->{'tick_len'} + $self->{'text_space'};
+   $y2 = $y1 + $self->{'tick_len'} + $self->{'text_space'} + $h;
    for (0..$#labels){
      $label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
-     $x2 = $x1 + ($delta * $_) - ($self->_gd_string_width($font,$label)/2) ;
-     $self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+     $x2 = $x1 + ($delta * $_) - ($self->string_width($font,$fsize,$label)/2) ;
+     $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
    }
  }
  elsif ($self->{'x_ticks'} =~ /^staggered/i ) {  #staggered ticks
@@ -2443,14 +2446,14 @@ sub _draw_x_number_ticks {
 
    for (0..$#labels) {
    $label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
-     $x2 = $x1 + ($delta * $_) - ($self->_gd_string_width($font,$label)/2);
+     $x2 = $x1 + ($delta * $_) - ($self->string_width($font,$fsize,$label)/2);
      unless ($_%2) {
       $y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
      }
      else {
      $y2 = $y1  + $h + 2*$self->{'text_space'} + $self->{'tick_len'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
      }
    }
  }
@@ -2461,9 +2464,9 @@ sub _draw_x_number_ticks {
      $label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
 
      #get the start point
-     $y2 = $y1  + $self->{'tick_len'} + $self->_gd_string_width($font,$label) + $self->{'text_space'};
+     $y2 = $y1  + $self->{'tick_len'} + $self->string_width($font,$fsize,$label) + $self->{'text_space'};
      $x2 = $x1 + ($delta * $_) - ($h /2);
-     $self->_gd_string($textcolor, $font, ANGLE_VERTICAL, $x2, $y2, $label);
+     $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL, $label);
    }
 
  }
@@ -2479,15 +2482,13 @@ warn "_draw_x_number_ticks: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
  #draw the ticks
  $y1 =$self->{'curr_y_max'};
  $y2 =$self->{'curr_y_max'} + $self->{'tick_len'};
- $self->{'gd_obj'}->setThickness($self->{'line_size'});
  for(0..$#labels ) {
    $x2 = $x1 + ($delta * $_);
-   $self->{'gd_obj'}->line($x2, $y1, $x2, $y2, $misccolor);
+   $self->{'surface'}->line( $misccolor,$line_size,$x2, $y1, $x2, $y2);
      if ($self->{'grid_lines'} || $self->{'x_grid_lines'}) {
         $self->{'grid_data'}->{'x'}->[$_] = $x2;
      }
  }
- $self->{'gd_obj'}->setThickness(1);
 
   return 1;
 }
@@ -2496,11 +2497,12 @@ warn "_draw_x_number_ticks: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
 sub _draw_x_ticks {
   my $self = shift;
   my $data = $self->{'dataref'};
-  my $font = 'tick_label_font';
-  my $textcolor = $self->_color_role_to_index('x_axis');
-  $textcolor ||= $self->_color_role_to_index('text');
-  my $misccolor = $self->_color_role_to_index('x_axis');
-  $misccolor ||= $self->_color_role_to_index('misc');
+  my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+  my $line_size = $self->{'line_size'};
+  my $textcolor = $self->_color_role_to_rgb('x_axis');
+  $textcolor ||= $self->_color_role_to_rgb('text');
+  my $misccolor = $self->_color_role_to_rgb('x_axis');
+  $misccolor ||= $self->_color_role_to_rgb('misc');
   my $label;
   my ($h);
   my ($x1, $x2, $y1, $y2);
@@ -2537,7 +2539,7 @@ sub _draw_x_ticks {
   else {
 		# Make sure the last label can be printed
 		my $label = $self->{f_x_tick}->($data->[0][$#{$data->[0]}]);
-		my $need = $self->_gd_string_width($font,$label) / 2;
+		my $need = $self->string_width($font,$fsize,$label) / 2;
 		if( defined($self->{'graph_border'}) and $need > $self->{'graph_border'} )
 		{
 			$self->{'curr_x_max'} -= $need - $self->{'graph_border'};
@@ -2549,7 +2551,7 @@ sub _draw_x_ticks {
   }
 
   #the same for the y value, but not so tricky
-  $y1 = $self->{'curr_y_max'} - $h - $self->{'text_space'};
+  $y1 = $self->{'curr_y_max'} - $self->{'text_space'};
 
   # get the delta value
   $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'}-1 : 1);
@@ -2596,8 +2598,8 @@ sub _draw_x_ticks {
         if ( defined($data->[0][$_*$self->{'skip_x_ticks'}]) ) {
            $label = $self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}]);
            $x2 = $x1 + ($delta * ($_ * $self->{'skip_x_ticks'})) 
-	         - $self->_gd_string_width($font,$label) / 2;
-           $self->_gd_string($textcolor, $font, 0, $x2, $y1, $label);
+	         - $self->string_width($font,$fsize,$label) / 2;
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, $label);
         }
       }     
     }
@@ -2605,8 +2607,8 @@ sub _draw_x_ticks {
      for (@{$self->{'custom_x_ticks'}}) {
          if ( defined($data->[0][$_]) ) {
              $label = $self->{f_x_tick}->($data->[0][$_]);
-             $x2 = $x1 + ($delta*$_) - $self->_gd_string_width($font,$label) / 2;
-             $self->_gd_string($textcolor, $font, 0, $x2, $y1, $label);
+             $x2 = $x1 + ($delta*$_) - $self->string_width($font,$fsize,$label) / 2;
+             $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, $label);
          }
      }
     }
@@ -2614,8 +2616,8 @@ sub _draw_x_ticks {
       for (0..$self->{'num_datapoints'}-1) {
         if ( defined($data->[0][$_]) ) {
           $label = $self->{f_x_tick}->($data->[0][$_]);
-          $x2 = $x1 + ($delta*$_) - $self->_gd_string_width($font,$label) / 2;
-          $self->_gd_string($textcolor, $font, 0, $x2, $y1, $label);
+          $x2 = $x1 + ($delta*$_) - $self->string_width($font,$fsize,$label) / 2;
+          $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, $label);
         }
       }
     }
@@ -2627,11 +2629,11 @@ sub _draw_x_ticks {
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         if ( defined($data->[0][$_*$self->{'skip_x_ticks'}]) ) {
            $x2 = $x1 + ($delta * ($_ * $self->{'skip_x_ticks'})) 
-	        - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}])) / 2;
+	        - $self->string_width($font,$fsize,$self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}])) / 2;
            if (($stag % 2) == 1) {
              $y1 -= $self->{'text_space'} + $h;
            }
-           $self->_gd_string($textcolor, $font, 0, $x2, $y1, 
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, 
 	                          $self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}]));
            if (($stag % 2) == 1) {
              $y1 += $self->{'text_space'} + $h;
@@ -2644,11 +2646,11 @@ sub _draw_x_ticks {
       $stag = 0;
       for (sort (@{$self->{'custom_x_ticks'}})) { # sort to make it look good
         if ( defined($data->[0][$_]) ) {
-           $x2 = $x1 + ($delta*$_) - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_])) / 2;
+           $x2 = $x1 + ($delta*$_) - $self->string_width($font,$fsize,$self->{f_x_tick}->($data->[0][$_])) / 2;
            if (($stag % 2) == 1) {
              $y1 -= $self->{'text_space'} + $h;
            }
-           $self->_gd_string($textcolor, $font, 0, $x2, $y1, $self->{f_x_tick}->($data->[0][$_]));
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, $self->{f_x_tick}->($data->[0][$_]));
            if (($stag % 2) == 1) {
              $y1 += $self->{'text_space'} + $h;
            }
@@ -2659,11 +2661,11 @@ sub _draw_x_ticks {
     else {
       for (0..$self->{'num_datapoints'}-1) {
         if ( defined($self->{f_x_tick}->($data->[0][$_]) ) ) {
-           $x2 = $x1 + ($delta*$_) - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_])) / 2;
+           $x2 = $x1 + ($delta*$_) - $self->string_width($font,$fsize,$self->{f_x_tick}->($data->[0][$_])) / 2;
            if (($_ % 2) == 1) {
              $y1 -= $self->{'text_space'} + $h;
            }
-           $self->_gd_string($textcolor, $font, 0, $x2, $y1, $self->{f_x_tick}->($data->[0][$_]));
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y1, 0, $self->{f_x_tick}->($data->[0][$_]));
            if (($_ % 2) == 1) {
              $y1 += $self->{'text_space'} + $h;
            }
@@ -2676,31 +2678,33 @@ sub _draw_x_ticks {
     if ($self->{'skip_x_ticks'} > 1) {
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         if ( defined($_) ) {
-          $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'})) - $h/2;
-          $y2 = $y1 - ($self->{'x_tick_label_width'} 
-	              - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}])));
-          $self->_gd_string($textcolor, $font, ANGLE_VERTICAL, $x2, $y2, 
-                                    $self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}]));
+		  $label = $self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}]);
+		  my $w = $self->string_width($font,$fsize,$label);
+          $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'})) + $h/2;
+          $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
+          $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL, $label);
         }
       }
     }
     elsif ($self->{'custom_x_ticks'}) {
       for (@{$self->{'custom_x_ticks'}}) {
         if ( defined($_) ) {
-           $x2 = $x1 + ($delta*$_) - $h/2;
-           $y2 = $y1 - ($self->{'x_tick_label_width'} - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_])));
-           $self->_gd_string($textcolor, $font, ANGLE_VERTICAL, $x2, $y2, 
-                                    $self->{f_x_tick}->($data->[0][$_]));
+		   $label = $self->{f_x_tick}->($data->[0][$_]);
+		   my $w = $self->string_width($font,$fsize,$label);
+           $x2 = $x1 + ($delta*$_) + $h/2;
+           $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL,$label);
          }
       }
     }
     else {
       for (0..$self->{'num_datapoints'}-1) {
         if ( defined($_) ) {
-           $x2 = $x1 + ($delta*$_) - $h/2;
-           $y2 = $y1 - ($self->{'x_tick_label_width'} - $self->_gd_string_width($font,$self->{f_x_tick}->($data->[0][$_])));
-           $self->_gd_string($textcolor, $font, ANGLE_VERTICAL, $x2, $y2, 
-                                    $self->{f_x_tick}->($data->[0][$_]));
+			$label = $self->{f_x_tick}->($data->[0][$_]);
+			my $w = $self->string_width($font,$fsize,$label);
+           $x2 = $x1 + ($delta*$_) + $h/2;
+           $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
+           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL, $label);
          }
       }
     }
@@ -2724,11 +2728,10 @@ sub _draw_x_ticks {
   # now plot the ticks
   $y1 = $self->{'curr_y_max'};
   $y2 = $self->{'curr_y_max'} - $self->{'tick_len'};
-  $self->{'gd_obj'}->setThickness($self->{'line_size'});
   if ($self->{'skip_x_ticks'} > 1) {
     for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
       $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'}));
-      $self->{'gd_obj'}->line($x2, $y1, $x2, $y2, $misccolor);
+      $self->{'surface'}->line($misccolor, $line_size, $x2, $y1, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'x_grid_lines'}) {
 	$self->{'grid_data'}->{'x'}->[$_] = $x2;
       }
@@ -2737,7 +2740,7 @@ sub _draw_x_ticks {
   elsif ($self->{'custom_x_ticks'}) {
     for (@{$self->{'custom_x_ticks'}}) {
       $x2 = $x1 + ($delta*$_);
-      $self->{'gd_obj'}->line($x2, $y1, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,$line_size,$x2, $y1, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'x_grid_lines'}) {
 	$self->{'grid_data'}->{'x'}->[$_] = $x2;
       }
@@ -2746,13 +2749,12 @@ sub _draw_x_ticks {
   else {
     for (0..$self->{'num_datapoints'}-1) {
       $x2 = $x1 + ($delta*$_);
-      $self->{'gd_obj'}->line($x2, $y1, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,$line_size,$x2, $y1, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'x_grid_lines'}) {
 	$self->{'grid_data'}->{'x'}->[$_] = $x2;
       }
     }
   }
-  $self->{'gd_obj'}->setThickness(1);
 
   # update the current y-max value
 print STDERR "_draw_x_ticks: curr_y_max=$self->{'curr_y_max'} => " if DEBUG;
@@ -2765,12 +2767,12 @@ warn "$self->{'curr_y_max'}" if DEBUG;
 sub _draw_y_ticks {
   my $self = shift;
   my $side = shift || 'left';
-  my $font = 'tick_label_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
   my $data = $self->{'dataref'};
-  my $textcolor = $self->_color_role_to_index($side eq 'left' ? 'y_axis' : 'y_axis2');
-  $textcolor ||= $self->_color_role_to_index('text');
-  my $misccolor = $self->_color_role_to_index($side eq 'left' ? 'y_axis' : 'y_axis2');
-  $misccolor ||= $self->_color_role_to_index('misc');
+  my $textcolor = $self->_color_role_to_rgb($side eq 'left' ? 'y_axis' : 'y_axis2');
+  $textcolor ||= $self->_color_role_to_rgb('text');
+  my $misccolor = $self->_color_role_to_rgb($side eq 'left' ? 'y_axis' : 'y_axis2');
+  $misccolor ||= $self->_color_role_to_rgb('misc');
   my @labels = @{$self->{'y_tick_labels'}};
   my ($w, $h);
   my ($x1, $x2, $y1, $y2);
@@ -2825,7 +2827,7 @@ sub _draw_y_ticks {
     $x2 = $x1 + $self->{'tick_len'};
     for ($s..$f) {
       $y2 = $y1 - ($delta * $_);
-      $self->_gd_line($x1, $y2, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'y2_grid_lines'}) {
         $self->{'grid_data'}->{'y2'}->[$_] = $y2;
       }
@@ -2837,9 +2839,10 @@ sub _draw_y_ticks {
 
     # now draw the labels
     for (0..$#labels) {
-      $y2 = $y1 - ($delta * $_);
-	  $self->_gd_string($textcolor,$font,0,$x1,$y2,$self->{'y_tick_labels'}[$_]);
-      # $self->{'gd_obj'}->string($font, $x1, $y2, $self->{'y_tick_labels'}[$_], $textcolor);
+      $label = $self->{'y_tick_labels'}[$_];
+	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+      $y2 = $y1 - ($delta * $_) + $h;
+	  $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }
   }
   elsif ($side eq 'both') { # put the ticks on the both sides
@@ -2854,10 +2857,10 @@ sub _draw_y_ticks {
     $delta = $height / ($self->{'y_ticks'} - 1);
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-      $y2 = $y1 - ($delta * $_);
-      $x2 = $x1 + $self->{'y_tick_label_width'} 
-              - $self->_gd_string_width($font,$label);
-      $self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+      $y2 = $y1 - ($delta * $_) + $h;
+      $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
+      $self->{'surface'}->string($textcolor,$font,$fsize,$x2,$y2,0,$label);
     }
 
     # and update the current x-min value
@@ -2870,7 +2873,7 @@ sub _draw_y_ticks {
     $y1 += $self->{'y_tick_label_height'}/2;
     for ($s..$f) {
       $y2 = $y1 - ($delta * $_);
-      $self->_gd_line($x1, $y2, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'y_grid_lines'}) {
         $self->{'grid_data'}->{'y'}->[$_] = $y2;
       }
@@ -2895,7 +2898,7 @@ sub _draw_y_ticks {
     $x2 = $x1 + $self->{'tick_len'};
     for ($s..$f) {
       $y2 = $y1 - ($delta * $_);
-      $self->_gd_line($x1, $y2, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'y2_grid_lines'}) {
         $self->{'grid_data'}->{'y2'}->[$_] = $y2;
       }
@@ -2907,8 +2910,10 @@ sub _draw_y_ticks {
 
     # now draw the labels
     for (0..$#labels) {
-      $y2 = $y1 - ($delta * $_);
-      $self->_gd_string($textcolor, $font, 0, $x1, $y2, $self->{'y_tick_labels'}[$_]);
+      $label = $self->{'y_tick_labels'}[$_];
+	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+      $y2 = $y1 - ($delta * $_) + $h;
+      $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }   
   }
   else { # just the left side
@@ -2922,10 +2927,10 @@ sub _draw_y_ticks {
     $delta = $height / ($self->{'y_ticks'} - 1);
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-      $y2 = $y1 - ($delta * $_);
-      $x2 = $x1 + $self->{'y_tick_label_width'} 
-              - $self->_gd_string_width($font,$label);
-      $self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+      $y2 = $y1 - ($delta * $_) + $h;
+      $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
+      $self->{'surface'}->string($textcolor, $font, $fsize, $x2, $y2, 0, $label);
     }
 
     # and update the current x-min value
@@ -2938,7 +2943,7 @@ sub _draw_y_ticks {
     $y1 += $self->{'y_tick_label_height'}/2;
     for ($s..$f) {
       $y2 = $y1 - ($delta * $_);
-      $self->_gd_line($x1, $y2, $x2, $y2, $misccolor);
+      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
       if ($self->{'grid_lines'} || $self->{'y_grid_lines'}) {
         $self->{'grid_data'}->{'y'}->[$_] = $y2;
       }
@@ -2954,23 +2959,27 @@ sub _draw_y_ticks {
 
 
 ##  put a grey background on the plot of the data itself
-sub _grey_background {
-  my $self = shift;
+sub _grey_background
+{
+	my( $self ) = @_;
 
-  # draw it
-  $self->{'gd_obj'}->filledRectangle ($self->{'curr_x_min'},
-                                      $self->{'curr_y_min'},
-                                       $self->{'curr_x_max'},
-				      $self->{'curr_y_max'},
-				      $self->_color_role_to_index('grey_background'));
-  # now return
-  return 1;
+	# draw it
+	$self->{'surface'}->filled_rectangle(
+			$self->_color_role_to_rgb('grey_background'),
+			0,
+			$self->{'curr_x_min'},
+			$self->{'curr_y_min'},
+			$self->{'curr_x_max'},
+			$self->{'curr_y_max'});
+
+	# now return
+	return 1;
 }
 
 # Column highlighting
 sub _draw_hilited_columns {
 	my $self = shift;
-	my $color = $self->_color_role_to_index('hilite_columns') || return;
+	my $color = $self->_color_role_to_rgb('hilite_columns') || return;
 	my $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
 	my $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
 	my $delta1 = ( $self->{'num_datapoints'} > 0 ) ? $width / ($self->{'num_datapoints'}*1) : $width;
@@ -3002,12 +3011,12 @@ sub _draw_grid_lines {
 sub _draw_x_grid_lines {
   my $self = shift;
   my $grid_role = shift || 'x_grid_lines';
-  my $gridcolor = $self->_color_role_to_index($grid_role);
+  my $gridcolor = $self->_color_role_to_rgb($grid_role);
   my ($x, $y, $i);
 
   foreach $x (@{ $self->{grid_data}->{'x'} }) {
     if ( defined $x) {
-       $self->_gd_line(($x, $self->{'curr_y_min'} + 1), $x, ($self->{'curr_y_max'} - 1), $gridcolor);
+       $self->{'surface'}->line( $gridcolor,1,($x, $self->{'curr_y_min'} + 1), $x, ($self->{'curr_y_max'} - 1));
     }
   }
   return 1;
@@ -3016,40 +3025,39 @@ sub _draw_x_grid_lines {
 sub _draw_y_grid_lines {
   my $self = shift;
   my $grid_role = shift || 'y_grid_lines';
-  my $gridcolor = $self->_color_role_to_index($grid_role);
+  my $gridcolor = $self->_color_role_to_rgb($grid_role);
+  my $line_size = $self->{'line_size'};
   my ($x, $y, $i);
 
   #Look if I'm an HorizontalBars object
-  $self->{gd_obj}->setThickness($self->{'line_size'});
   if ($self->isa('Chart::HorizontalBars')) {
       for ($i = 0; $i < ($#{ $self->{grid_data}->{'y'} } ) + 1; $i++) {
         $y = $self->{grid_data}->{'y'}->[$i];
-        $self->_gd_line(($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y, $gridcolor);
+        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
       }
   } else {
      # loop for y values is a little different. This is to discard the first
      # and last values we were given - the top/bottom of the chart area.
      for ($i = 1; $i < ($#{ $self->{grid_data}->{'y'} } ) + 1  ; $i++) {  ###
         $y = $self->{grid_data}->{'y'}->[$i];
-        $self->_gd_line(($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y, $gridcolor);
+        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
      }
   }
-  $self->{gd_obj}->setThickness(1);
   return 1;
 }
 
 sub _draw_y2_grid_lines {
   my $self = shift;
   my $grid_role = shift || 'y2_grid_lines';
-  my $gridcolor = $self->_color_role_to_index($grid_role);
+  my $gridcolor = $self->_color_role_to_rgb($grid_role);
+  my $line_size = $self->{'line_size'};
   my ($x, $y, $i);
 
   #Look if I'm an HorizontalBars object
-  $self->{gd_obj}->setThickness($self->{'line_size'});
   if ($self->isa('Chart::HorizontalBars')) {
       for ($i = 0; $i < ($#{ $self->{grid_data}->{'y'} } ) +1 ; $i++) {
         $y = $self->{grid_data}->{'y'}->[$i];
-        $self->_gd_line(($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y, $gridcolor);
+        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
       }
   }
   else {
@@ -3057,9 +3065,8 @@ sub _draw_y2_grid_lines {
   # and last values we were given - the top/bottom of the chart area.
    for ($i = 1; $i < $#{ $self->{grid_data}->{'y2'} }; $i++) {
      $y = $self->{grid_data}->{'y2'}->[$i];
-     $self->_gd_line(($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y, $gridcolor);
+     $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
    }
-   $self->{gd_obj}->setThickness(1);
   }
   return 1;
 }

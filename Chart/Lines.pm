@@ -20,15 +20,14 @@
 
 package Chart::Lines;
 
-use Chart::Base 2.3;
-use GD;
-use Carp;
+use Chart::Base 3.0;
+
+@ISA = qw(Chart::Base);
+$VERSION = $Chart::Base::VERSION;
+
 use strict;
 
 use constant DEBUG => 0;
-
-@Chart::Lines::ISA = qw(Chart::Base);
-$Chart::Lines::VERSION = '2.3';
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
@@ -44,12 +43,14 @@ $Chart::Lines::VERSION = '2.3';
 sub _draw_data {
   my $self = shift;
   my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
+  my $misccolor = $self->_color_role_to_rgb('misc');
   my ($x1, $x2, $x3, $y1, $y2, $y3, $mod, $abs_x_max, $abs_y_max, $tan_alpha);
   my ($width, $height, $delta, $delta_num, $map, $t_x_min, $t_x_max, $t_y_min, $t_y_max);
   my ($i, $j, $color, $brush, $zero_offset);
   my $repair_top_flag = 0;
   my $repair_bottom_flag = 0;
+  my $brush_size = $self->{'brush_size'};
+  my $pt_size = $self->{'pt_size'};
 
   # init the imagemap data field if they asked for it
   if ($self->{'imagemap'}) {
@@ -96,58 +97,57 @@ sub _draw_data {
   else {
     $y1 = $self->{'curr_y_min'} + ($map * $self->{'max_val'});
     $mod = 0;
-    $self->{'gd_obj'}->line ($self->{'curr_x_min'}, $y1,
-                             $self->{'curr_x_max'}, $y1,
-                             $misccolor);
+    $self->{'surface'}->line(
+			$misccolor,
+			1,
+			$self->{'curr_x_min'}, $y1,
+			$self->{'curr_x_max'}, $y1);
   }
 
   # Work out where to place a line marker
   # = brush_size * 3
   my $marker_delta = $self->{'brush_size'} * 10;
-  my $marker_index = $self->{'curr_x_min'}+$marker_delta;
   
   # draw the lines
-  $self->{'gd_obj'}->setThickness($self->{'brush_size'});
   for $i (1..$self->{'num_datasets'}) {
     # get the color for this dataset, and set the brush
-	$color = $self->_color_role_to_index('dataset'.($i-1));
-	$brush = $self->_prepare_brush ($color, 'point',
-									$self->{'pointStyle' . $i});
-	$self->{'gd_obj'}->setBrush ($brush);
+	$color = $self->_color_role_to_rgb('dataset'.($i-1));
     
+	my $shape = $self->{'pointStyle' . $i};
+	my $marker_index = 0; # haven't drawn one yet
+
+	my @points;
     # draw every line for this dataset
-    for $j (1..$self->{'num_datapoints'}-1) {
+    for $j (0..$self->{'num_datapoints'}-1) {
       # don't try to draw anything if there's no data
-      if (defined ($data->[$i][$j]) and defined ($data->[$i][$j-1])) {
+	  if( !defined( $data->[$i][$j] ) )
+	  {
+		  if( scalar(@points) > 1 )
+		  {
+			  $self->{'surface'}->continuous($color,$brush_size,\@points);
+		  }
+		  @points = ();
+		  if ($self->{'imagemap'}) {
+			  $self->{'imagemap_data'}->[$i][$j] = [ undef(), undef() ];
+		  }
+		  next;
+	  }
         if ($self->{'xy_plot'}) {
-           $x2 = $x1 + $delta_num * $data->[0][$j-1] + $zero_offset;
            $x3 = $x1 + $delta_num * $data->[0][$j] + $zero_offset;
         }
         else {
-           $x2 = $x1 + ($delta * ($j - 1));
            $x3 = $x1 + ($delta * $j);
         }
-		$y2 = $y1 - (($data->[$i][$j-1] - $mod) * $map);
 		$y3 = $y1 - (($data->[$i][$j] - $mod) * $map);
 
         # now draw the line
-        $self->{'gd_obj'}->line($x2, $y2, $x3, $y3, $color);
+		push @points, [$x3,$y3];
 
 		# draw the marker
-		if( $self->{'pointStyle' . $i} && $x3 > $marker_index ) {
-			my $x = $x2+($x3-$x2);
-			my $y = $y2-($y2-$y3);
-			$self->{'gd_obj'}->line($x, $y, $x, $y, gdBrushed);
-			$marker_index = $x + $marker_delta;
+		if( defined($shape) && $x3 > $marker_index ) {
+			$self->{'surface'}->point($color,$pt_size,$x3,$y3,$shape);
+			$marker_index = $x3 + $marker_delta;
 		}
-#		while( $self->{'pointStyle' . $i} && $x3 > $marker_index ) {
-#			my $m = ($y3-$y2)/($x3-$x2);
-#			my $c = $y2;
-#			my $x = $marker_index;
-#			my $y = $m*($x3-$x2) + $c;
-#       	$self->{'gd_obj'}->line($x, $y, $x, $y, gdBrushed);
-#			$marker_index += $marker_delta;
-#		}
        
         # set the flags, if the lines are out of the borders of the chart
         if ( ($data->[$i][$j] > $self->{'max_val'}) || ($data->[$i][$j-1] > $self->{'max_val'}) ) {
@@ -162,31 +162,31 @@ sub _draw_data {
            $repair_bottom_flag = 1;
         }
 
-	# store the imagemap data if they asked for it
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$i][$j-1] = [ $x2, $y2 ];
-	  $self->{'imagemap_data'}->[$i][$j] = [ $x3, $y3 ];
-	}
-      } else {
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$i][$j-1] = [ undef(), undef() ];
-	  $self->{'imagemap_data'}->[$i][$j] = [ undef(), undef() ];
-        }
-      }
+		# store the imagemap data if they asked for it
+		if ($self->{'imagemap'}) {
+			$self->{'imagemap_data'}->[$i][$j] = [ $x3, $y3 ];
+		}
     }
+	if( @points > 1 )
+	{
+		$self->{'surface'}->continuous($color,$brush_size,\@points);
+	}
+	@points = ();
   }
   # and finally box it off
   unless( exists($self->{'draw_box'}) and $self->{'draw_box'} eq 'none' )
   {
-	$self->_gd_rectangle ($self->{'curr_x_min'},
-					$self->{'curr_y_min'},
-					$self->{'curr_x_max'},
-					$self->{'curr_y_max'},
-					$misccolor);
+	$self->{surface}->rectangle(
+			$misccolor,
+			1,
+			$self->{'curr_x_min'},
+			$self->{'curr_y_min'},
+			$self->{'curr_x_max'},
+			$self->{'curr_y_max'});
   }
 
    #get the width and the heigth of the complete picture
-  ($abs_x_max, $abs_y_max) = $self->{'gd_obj'}->getBounds();
+  ($abs_x_max, $abs_y_max) = ($self->{width}, $self->{height});
   
   #repair the chart, if the lines are out of the borders of the chart
   if ($repair_top_flag) {

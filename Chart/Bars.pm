@@ -20,19 +20,14 @@
 
 package Chart::Bars;
 
-use Chart::Base 2.4;
-use GD;
-use Carp;
+use Chart::Base 3.0;
+
+@ISA = qw(Chart::Base);
+$VERSION = $Chart::Base::VERSION;
+
 use strict;
 
-@Chart::Bars::ISA = qw(Chart::Base);
-$Chart::Bars::VERSION = '2.4';
-
-use constant PI => 4 * atan2(1, 1);
-use constant ANGLE_VERTICAL => (90 / 360) * (2 * PI);
 use constant DEBUG => 0;
-use constant TRUE => 1;
-use constant FALSE => 0;
 
 =pod
 
@@ -68,13 +63,14 @@ Vertical bar chart.
 ## finally get around to plotting the data
 sub _draw_data {
   my $self = shift;
-  my $font = 'series_label_font';
+  my( $font, $fsize ) = $self->_font_role_to_font( 'series_label' );
   my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
+  my $misccolor = $self->_color_role_to_rgb('misc');
+  my $white = $self->_color_spec_to_rgb('data_label','white');
+  my $pink = [255,0,255];
   my ($x1, $x2, $x3, $y1, $y2, $y3);
-  my ($width, $height, $delta1, $delta2, $map, $mod, $cut, $pink);
+  my ($width, $height, $delta1, $delta2, $map, $mod, $cut);
   my (@LABELS, $i, $j, $color, $neg_color);
-  my $white = $self->{'gd_obj'}->colorAllocate(255,255,255);
   my $zero_offset = $self->{'zero_offset'} || [];
   if( ref($zero_offset) eq 'ARRAY' ) {
 	  for(1..$self->{'num_datasets'}) {
@@ -127,24 +123,26 @@ sub _draw_data {
     else {
      $y1 = $self->{'curr_y_min'} + ($map * ($self->{'max_val'} - $zero_offset->[$i-1]));
      $mod = 0;
-     $self->{'gd_obj'}->line ($self->{'curr_x_min'}, $y1,
-                              $self->{'curr_x_max'}, $y1,
-                              $misccolor);
+     $self->{'surface'}->line(
+	 		$misccolor,
+			1,
+	 		$self->{'curr_x_min'}, $y1,
+			$self->{'curr_x_max'}, $y1);
     }
   
     # get the color for this dataset
-    $color = $self->_color_role_to_index('dataset'.($i-1));
+    $color = $self->_color_role_to_rgb('dataset'.($i-1));
 	$neg_color = defined($self->{'color_table'}{'neg_dataset'.($i-1)}) ?
-		$self->_color_role_to_index('neg_dataset'.($i-1)) :
+		$self->_color_role_to_rgb('neg_dataset'.($i-1)) :
 		$color;
     
 	# Draw a line at the zero_offset for the current data set
 	if( $zero_offset->[$i-1] ) {
-		$self->{'gd_obj'}->setThickness(3);
-		$self->{'gd_obj'}->line ($self->{'curr_x_min'}, $y1,
-								 $self->{'curr_x_max'}, $y1,
-								 $color);
-		$self->{'gd_obj'}->setThickness(1);
+		$self->{'surface'}->line(
+			$color,
+			3,
+			$self->{'curr_x_min'}, $y1,
+			$self->{'curr_x_max'}, $y1);
 	}
 	
     # draw every bar for this dataset
@@ -184,30 +182,30 @@ sub _draw_data {
 	## y2 and y3 are reversed in some cases because GD's fill
 	## algorithm is lame
 	my $value = &{$self->{'f_y_tick'}}($data->[$i][$j] - $zero_offset->[$i-1]);
-	my ($w,$h) = $self->_gd_string_dimensions($font,$value);
+	my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$value);
 	if( $y3 <= $y2 ) {
-	  $self->{'gd_obj'}->filledRectangle ($x2, $y3, $x3, $y2, $color);
+	  $self->{'surface'}->filled_rectangle($color, 0, $x2, $y3, $x3, $y2);
 	  if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y3, $x3, $y2];
 	  }
 	  if( my $style = $self->{'series_label'}[$i-1] ) {
-		  if( 1 == $style || $self->_gd_string_width($font,$value) > ($y2-$y3) ) {
-			  push @LABELS, [$color,$font,0,int(($x2+$x3)/2-$w/2),$y3-$h-$self->{'text_space'},$value];
+		  if( 1 == $style || $self->string_width($font,$fsize,$value) > ($y2-$y3) ) {
+			  push @LABELS, [$color,$font,$fsize,int(($x2+$x3)/2-$w/2),$y3-$h-$self->{'text_space'},0,$value];
 		  } else {
-			  push @LABELS, [$white,$font,ANGLE_VERTICAL,int(($x2+$x3)/2-$h/2),$y3+$w+$self->{'text_space'},$value];
+			  push @LABELS, [$white,$font,$fsize,int(($x2+$x3)/2-$h/2),$y3+$w+$self->{'text_space'},ANGLE_VERTICAL,$value];
 		  }
 	  }
 	}
 	else {
-	  $self->{'gd_obj'}->filledRectangle ($x2, $y2, $x3, $y3, $neg_color);
+	  $self->{'surface'}->filled_rectangle($neg_color, 0, $x2, $y2, $x3, $y3);
 	  if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y2, $x3, $y3];
 	  }
 	  if( my $style = $self->{'series_label'}[$i-1] ) {
-		  if( 1 == $style || $self->_gd_string_width($font,$value) > ($y3-$y2) ) {
-			  push @LABELS, [$color,$font,0,int(($x2+$x3)/2-$w/2),$y3+$self->{'text_space'},$value];
+		  if( 1 == $style || $self->string_width($font,$fsize,$value) > ($y3-$y2) ) {
+			  push @LABELS, [$color,$font,$fsize,int(($x2+$x3)/2-$w/2),$y3+$self->{'text_space'},0,$value];
 		  } else {
-			  push @LABELS, [$white,$font,ANGLE_VERTICAL,int(($x2+$x3)/2-$h/2),$y3-$self->{'text_space'},$value];
+			  push @LABELS, [$white,$font,$fsize,int(($x2+$x3)/2-$h/2),$y3-$self->{'text_space'},ANGLE_VERTICAL,$value];
 		  }
 	  }
 	}
@@ -215,34 +213,34 @@ sub _draw_data {
     # now outline it. outline red if the bar had been cut off
     if( $cut )
 	{
-      $pink = $self->{'gd_obj'}->colorAllocate(255,0,255);
-      $self->_gd_rectangle ($x2, $y3, $x3, $y2, $pink, $bar_border_size);
+      $self->{'surface'}->rectangle($pink, $bar_border_size, $x2, $y3, $x3, $y2);
 	  # Line through the bar to indicate it's been cut off
-	  $self->{'gd_obj'}->setThickness(int(($x3-$x2)/3) || 1);
+	  my $line_size = int(($x3-$x2)/3) || 1;
 	  my $up = $y2 > $y3 ? 1 : -1;
-	  $self->{'gd_obj'}->line ($x2, int(($y3+$y2)/2), $x3, int(($y3+$y2)/2)-$up*($x3-$x2), $white);
-	  $self->{'gd_obj'}->line ($x2, int(($y3+$y2)/2)+$up*($x3-$x2), $x3, int(($y3+$y2)/2), $white);
-	  $self->{'gd_obj'}->setThickness(1);
+	  $self->{'surface'}->line($white, $line_size, $x2, int(($y3+$y2)/2), $x3, int(($y3+$y2)/2)-$up*($x3-$x2));
+	  $self->{'surface'}->line($white, $line_size, $x2, int(($y3+$y2)/2)+$up*($x3-$x2), $x3, int(($y3+$y2)/2));
     }
 	else
 	{
-	  $self->_gd_rectangle ($x2, $y3, $x3, $y2, $misccolor, $bar_border_size);
+	  $self->{'surface'}->rectangle($misccolor, $bar_border_size, $x2, $y3, $x3, $y2);
 	}
    }
   }
   
   # render the series labels after columns, otherwise the text gets overwritten
   for(@LABELS) {
-	$self->_gd_string(@$_);
+	$self->{'surface'}->string(@$_);
   }
   
-  # and finaly box it off 
-  $self->_gd_rectangle ($self->{'curr_x_min'},
-  				$self->{'curr_y_min'},
-				$self->{'curr_x_max'},
-				$self->{'curr_y_max'},
-				$misccolor);
-  return;
+  # and finally box it off 
+  $self->{'surface'}->rectangle(
+		$misccolor,
+		1,
+		$self->{'curr_x_min'},
+		$self->{'curr_y_min'},
+		$self->{'curr_x_max'},
+		$self->{'curr_y_max'});
+
 }
 
 ## be a good module and return 1
