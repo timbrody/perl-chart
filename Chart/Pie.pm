@@ -83,6 +83,7 @@ sub _draw_data {
   my ($label_length, $last_dlabel_length); 
   my ($label_width, $label_height);
   my @LABELS;
+  my $line_size = $self->{'line_size'};
 
   # set up initial constant values
   $start_degrees=0;
@@ -238,7 +239,7 @@ sub _draw_data {
 	$self->{'surface'}->filled_segment( $color, 0, $centerX, $centerY, $diameter, $diameter, $start_degrees/180*pi, $end_degrees/180*pi );
  
  	# Add a border around the segment
-	$self->{'surface'}->segment( $misccolor, $self->{'line_size'}, $centerX, $centerY, $diameter, $diameter, $start_degrees/180*pi, $end_degrees/180*pi );
+	$self->{'surface'}->segment( $misccolor, -1*abs($line_size), $centerX, $centerY, $diameter, $diameter, $start_degrees/180*pi, $end_degrees/180*pi );
 
     # Figure out where to place the label
     $labelX = $centerX+$label_offset*$diameter*cos($label_degrees*pi/180);

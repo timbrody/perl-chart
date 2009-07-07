@@ -44,9 +44,9 @@ _draw_y_grid_lines does plot all lines now
 use Carp;
 use Math::Trig;
 use Exporter;
-use GD::Polygon;
 
 use Chart::Render;
+use Chart::Debug qw( trace debug );
 use FileHandle;
 
 use vars qw( $VERSION @ISA @EXPORT );
@@ -277,62 +277,61 @@ sub get_data {
   return $ref;
 }
 
+sub _open_fh
+{
+	my( $self, $file ) = @_;
+
+	my $fh;
+
+	# do some ugly checking to see if they gave me
+	# a filehandle or a file name
+	if ((ref \$file) eq 'SCALAR') {  
+		# they gave me a file name
+		# Try to delete an existing file
+		if ( -f $file ) {
+			my $number_deleted_files = unlink $file;
+			if ( $number_deleted_files != 1 ) {
+				Carp::croak "Error: File \"$file\" did already exist, but it fails to delete it"; 
+			}
+		}
+		$fh = FileHandle->new (">$file");
+		if( !defined $fh) { 
+			Carp::croak "Error: File \"$file\" could not be created!\n";
+		}
+	}
+	elsif ((ref \$file) =~ /^(?:REF|GLOB)$/) {
+		# either a FileHandle object or a regular file handle
+		$fh = $file;
+	}
+	else {
+		Carp::croak "Expected filename or file handle";
+	}
+
+	return $fh;
+}
+
+sub _init_surface
+{
+	my( $self, $format ) = @_;
+
+	$self->{'surface'} = Chart::Render->new( $format, $self->{width}, $self->{height} );
+}
 
 ##  called after the options are set, this method
 ##  invokes all my private methods to actually
 ##  draw the chart and plot the data
 sub png {
-	my ($self,$file,$dataref,$fh) = @_;
+	my ($self,$file,$dataref) = @_;
 
-  # do some ugly checking to see if they gave me
-  # a filehandle or a file name
-  if ((ref \$file) eq 'SCALAR') {  
-    # they gave me a file name
-    # Try to delete an existing file
-    if ( -f $file ) {
-       my $number_deleted_files = unlink $file;
-       if ( $number_deleted_files != 1 ) {
-          croak "Error: File \"$file\" did already exist, but it fails to delete it"; 
-       }
-    }
-    $fh = FileHandle->new (">$file");
-    if( !defined $fh) { 
-       croak "Error: File \"$file\" could not be created!\n";
-    }
-  }
-  elsif ((ref \$file) =~ /^(?:REF|GLOB)$/) {
-    # either a FileHandle object or a regular file handle
-    $fh = $file;
-  }
-  else {
-    croak "I'm not sure what you gave me to write this png to,\n",
-          "but it wasn't a filename or a filehandle.\n";
-  }
+	my $fh = $self->_open_fh( $file );
 
-	# initialise the drawing surface
-	$self->_init_surface( "png" );
+	# write the image to the file
+	binmode $fh;
 
-  # allocate the background color
-  $self->_set_colors();
+	print $fh $self->scalar_png( $dataref );
 
-  # make sure the object has its copy of the data
-  $self->_copy_data($dataref);
-
-  # do a sanity check on the data, and collect some basic facts
-  # about the data
-  $self->_check_data();
-
-  # pass off the real work to the appropriate subs
-  $self->_draw();
-
-  # now write it to the file handle, and don't forget
-  # to be nice to the poor ppl using nt
-  binmode $fh;
-
-  print $fh $self->{'surface'}->render();
-  
-  # now exit
-  return 1;
+	# now exit
+	return 1;
 }
 
 
@@ -340,58 +339,44 @@ sub png {
 ##  invokes all my private methods to actually
 ##  draw the chart and plot the data
 sub cgi_png {
-  my $self = shift;
-  my $dataref = shift;
+	my( $self, $dataref ) = @_;
 
-  # allocate the background color
-  $self->_set_colors();
+	# print the header (ripped the crlf octal from the CGI module)
+	if ($self->{no_cache}) {
+		print "Content-type: image/png\015\012Pragma: no-cache\015\012\015\012";
+	} else {
+		print "Content-type: image/png\015\012\015\012";
+	}
 
-  # make sure the object has its copy of the data
-  $self->_copy_data($dataref);
+	$self->png( $dataref, \*STDOUT );
 
-  # do a sanity check on the data, and collect some basic facts
-  # about the data
-  $self->_check_data();
-
-  # pass off the real work to the appropriate subs
-  $self->_draw();
-
-  # print the header (ripped the crlf octal from the CGI module)
-  if ($self->{no_cache}) {
-      print "Content-type: image/png\015\012Pragma: no-cache\015\012\015\012";
-  } else {
-      print "Content-type: image/png\015\012\015\012";
-  }
-
-  # now print the png, and binmode it first so nt likes us
-  binmode STDOUT;
-  print STDOUT $self->{'gd_obj'}->png();
-
-  # now exit
-  return 1;
+	# now exit
+	return 1;
 }
 
 ##  called after the options are set, this method
 ##  invokes all my private methods to actually
 ##  draw the chart and plot the data
 sub scalar_png {
-  my $self = shift;
-  my $dataref = shift;
+	my( $self, $dataref ) = @_;
 
-  # make sure the object has its copy of the data
-  $self->_copy_data($dataref);
+	# initialise the drawing surface
+	$self->_init_surface( "png" );
 
-  # do a sanity check on the data, and collect some basic facts
-  # about the data
-  $self->_check_data();
+	# allocate the background color
+	$self->_set_colors();
 
-  # pass off the real work to the appropriate subs
-  $self->_draw();
+	# make sure the object has its copy of the data
+	$self->_copy_data($dataref);
 
-  # returns the png image as a scalar value, so that
-  # the programmer-user can do whatever the heck
-  # s/he wants to with it
-  $self->{'gd_obj'}->png();
+	# do a sanity check on the data, and collect some basic facts
+	# about the data
+	$self->_check_data();
+
+	# pass off the real work to the appropriate subs
+	$self->_draw();
+
+	return $self->{'surface'}->render();
 }
 
 
@@ -399,37 +384,9 @@ sub scalar_png {
 ##  invokes all my private methods to actually
 ##  draw the chart and plot the data
 sub jpeg {
-  my $self = shift;
-  my $file = shift;
-  my $dataref = shift;
-  my $fh;
+	my( $self, $file, $dataref ) = @_;
 
-  # do some ugly checking to see if they gave me
-  # a filehandle or a file name
-  if ((ref \$file) eq 'SCALAR') {  
-    # they gave me a file name
-    $fh = FileHandle->new (">$file");
-    # they gave me a file name
-    # Try to delete an existing file
-    if ( -f $file ) {
-       my $number_deleted_files = unlink $file;
-       if ( $number_deleted_files != 1 ) {
-          croak "Error: File \"$file\" did already exist, but it fails to delete it"; 
-       }
-    }
-    $fh = FileHandle->new (">$file");
-    if( !defined $fh) { 
-       croak "Error: File \"$file\" could not be created!\n";
-    }
-  }
-  elsif ((ref \$file) =~ /^(?:REF|GLOB)$/) {
-    # either a FileHandle object or a regular file handle
-    $fh = $file;
-  }
-  else {
-    croak "I'm not sure what you gave me to write this jpeg to,\n",
-          "but it wasn't a filename or a filehandle.\n";
-  }
+	my $fh = $self->_open_fh( $file );
 
   # allocate the background color
   $self->_set_colors();
@@ -532,22 +489,15 @@ sub make_gd {
   return $self->{'gd_obj'};
 }
 
-sub _init_surface
-{
-	my( $self, $format ) = @_;
-
-	$self->{'surface'} = Chart::Render->new( $format, $self->{width}, $self->{height} );
-}
-
-=item $chart->svg( $file [, $dataref ] )
+=item $chart->scalar_svg()
 
 Render the chart to $file in SVG format.
 
 =cut
 
-sub svg
+sub scalar_svg
 {
-	my( $self, $file, $dataref ) = @_;
+	my( $self, $dataref ) = @_;
 
 	$self->_init_surface( "svg" );
 
@@ -557,7 +507,20 @@ sub svg
 
 	$self->_draw();
 
-	$self->{'surface'}->svg( $file );
+	return $self->{'surface'}->render();
+}
+
+sub svg
+{
+	my( $self, $file, $dataref ) = @_;
+
+	my $fh = $self->_open_fh( $file );
+
+	binmode($fh);
+
+	print $fh $self->scalar_svg();
+
+	close($fh);
 }
 
 ##  get the information to turn the chart into an imagemap
@@ -719,7 +682,7 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   $self->{'brush_size'} = -3;
 
   # default thickness for all other lines
-  $self->{'line_size'} = -1;
+  $self->{'line_size'} = 1;
 
   # let the points in Chart::Points and Chart::LinesPoints be 18 pixels wide
   $self->{'pt_size'} = 18;
@@ -957,11 +920,22 @@ sub _check_data {
   # find the longest x-tick label
   $self->{'x_tick_label_width'} = 0;
   $self->{'x_tick_label_height'} = 0;
-  for (@{$self->{'dataref'}->[0]}) {
-        next if !defined($_);
-		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$self->{f_x_tick}->($_));
-        $self->{'x_tick_label_width'} = $w if $w > $self->{'x_tick_label_width'};
-        $self->{'x_tick_label_height'} = $h if $h > $self->{'x_tick_label_height'};
+  my $f_x_tick = $self->{'f_x_tick'};
+  if (defined $self->{'skip_x_ticks'} && $self->{'skip_x_ticks'} > 1) {
+	  for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
+		  my $label = &$f_x_tick($self->{'dataref'}->[0][$_*$self->{'skip_x_ticks'}]);
+		  my ($w,$h) = $self->string_bounds($font,$fsize,$label);
+		  $self->{'x_tick_label_width'} = $w if $w > $self->{'x_tick_label_width'};
+		  $self->{'x_tick_label_height'} = $h if $h > $self->{'x_tick_label_height'};
+	  }
+  }
+  else {
+	  for (@{$self->{'dataref'}->[0]}) {
+			next if !defined($_);
+			my ($w,$h) = $self->string_bounds($font,$fsize,&$f_x_tick($_));
+			$self->{'x_tick_label_width'} = $w if $w > $self->{'x_tick_label_width'};
+			$self->{'x_tick_label_height'} = $h if $h > $self->{'x_tick_label_height'};
+	  }
   }
   if ( $length <= 0 ) { $length = 1; }    # make sure $length is positive and greater 0
   $self->{'x_tick_label_width'} = 1 if $self->{'x_tick_label_width'} <= 0;
@@ -998,13 +972,15 @@ sub _draw {
   $self->{'curr_y_max'} -= $self->{'png_border'};
   $self->{'curr_y_min'} += $self->{'png_border'};
 
-warn "_draw: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
 
   # draw in the title
   $self->_draw_title();
 
   # have to leave this here for backwards compatibility
   $self->_draw_sub_title();
+
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
 
   # sort the data if they want to (mainly here to make sure
   # pareto charts get sorted)
@@ -1144,7 +1120,7 @@ sub _draw_title {
          + $self->{'curr_x_min'};
   $y = $self->{'curr_y_min'}; # There's nothing above title so no point adding text_space
   for(0..$#lines) {
-	  ($w,$h) = $self->{'surface'}->string_bounds($font, $fsize, $lines[$_]);
+	  ($w,$h) = $self->string_bounds($font, $fsize, $lines[$_]);
 	  $y = ($self->{'curr_y_min'} += $h);
 	  $self->{'surface'}->string($color,$font,$fsize,$x-$w/2,$y,0,$lines[$_]);
 	  $y = ($self->{'curr_y_min'} += $self->{'text_space'});
@@ -1172,7 +1148,7 @@ sub _draw_sub_title {
          + $self->{'curr_x_min'};
   $y = ($self->{'curr_y_min'} += $self->{'text_space'});
   for(0..$#lines) {
-	  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$lines[$_]);
+	  ($w,$h) = $self->string_bounds($font,$fsize,$lines[$_]);
 	  $y = ($self->{'curr_y_min'} += $self->{'text_space'} + $h);
 	  $self->{'surface'}->string($color,$font,$fsize,$x-$w/2,$y,0,$lines[$_]);
   }
@@ -1286,7 +1262,7 @@ sub _find_x_scale {
 #		push @tickLabels, $labelText; # TODO Wrong?
 		push @tickLabels, $labelNum;
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
-		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
+		my ($w,$h) = $self->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelWidth = $w if $w > $maxtickLabelWidth;
 		$maxtickLabelHeight = $h if $h > $maxtickLabelHeight;
    }
@@ -1402,7 +1378,7 @@ sub _find_y_scale
 			}	
 			
 		push @tickLabels, $labelText;
-		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
+		my ($w,$h) = $self->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
 		$maxtickLabelWidth = $w if $maxtickLabelWidth < $w;
 		$maxtickLabelHeight = $h if $maxtickLabelHeight < $h;
@@ -1489,7 +1465,7 @@ sub _find_y_scale
 			$labelText = sprintf("%.".$precision."f", $labelNum);
 		}
 		push @tickLabels, $labelText;
-		my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$labelText);
+		my ($w,$h) = $self->string_bounds($font,$fsize,$labelText);
 		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
 		$maxtickLabelWidth = $w if $maxtickLabelWidth < $w;
 		$maxtickLabelHeight = $h if $maxtickLabelHeight < $h;
@@ -1761,16 +1737,20 @@ sub _plot {
   $self->{'curr_y_min'} += $self->{'graph_border'};
   $self->{'curr_y_max'} -= $self->{'graph_border'};
 
-warn "_plot: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
 
   # draw the x- and y-axis labels
   $self->_draw_x_label if $self->{'x_label'};
   $self->_draw_y_label('left') if $self->{'y_label'};
   $self->_draw_y_label('right') if $self->{'y_label2'};
 
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
+
   # draw the ticks and tick labels
   $self->_draw_ticks;
   
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
+
   # give the plot a grey background if they want it
   $self->_grey_background if $self->{'grey_background'};
   
@@ -1793,6 +1773,14 @@ warn "_plot: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   
   # and return
   return 1;
+}
+
+# string_bounds is used so much we'll provide a utility method here
+sub string_bounds
+{
+	my( $self, $font, $size, $string ) = @_;
+
+	return $self->{'surface'}->string_bounds( $font, $size, $string );
 }
 
 sub string_width
@@ -1872,7 +1860,7 @@ sub _draw_legend {
     unless ($self->{'legend_labels'}[$_-1]) {
       $self->{'legend_labels'}[$_-1] = "Dataset $_";
     }
-	($length,$height) = $self->{'surface'}->string_bounds($font,$fsize,$self->{'legend_labels'}[$_-1]);
+	($length,$height) = $self->string_bounds($font,$fsize,$self->{'legend_labels'}[$_-1]);
     if ($length > $self->{'max_legend_label_width'}) {
       $self->{'max_legend_label_width'} = $length;
 	  $self->{'max_legend_label_height'} = $height;
@@ -1991,12 +1979,13 @@ sub _draw_bottom_legend {
                                 $x + $self->{'legend_example_size'}, $y);
 
         # reset the brush for points
-#        $brush = $self->_prepare_brush($color, 'point',
-#				$self->{'pointStyle'.($index+1)});
-#        $self->{'gd_obj'}->setBrush($brush);
         # draw the point
-        $x3 = int($x + $self->{'legend_example_size'}/2);
-#        $self->{'surface'}->line( gdBrushed,$line_size,$x3, $y, $x3, $y) if $self->{'pointStyle'.($index+1)};
+		my $shape = $self->{'pointStyle'.($index+1)};
+		if( defined $shape )
+		{
+			$x3 = int($x + $self->{'legend_example_size'}/2);
+			$self->{'surface'}->point($color,$self->{'legend_example_size'},$x3,$y,$shape);
+		}
 
         # adjust the x-y coordinates for the start of the label
 		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
@@ -2192,7 +2181,8 @@ sub _draw_left_legend {
   my $self = shift;
   my @labels = @{$self->{'legend_labels'}};
   my ($x1, $x2, $x3, $y1, $y2, $width, $color, $misccolor, $w, $h, $brush);
-  my( $font, $fsize ) = $self->_font_role_to_font( $self->{'legend'} );
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+  my $line_size = $self->{'line_size'};
  
   # get the size of the font
   #($h, $w) = ($font->height, $font->width);
@@ -2216,9 +2206,7 @@ sub _draw_left_legend {
 	  + (2 * $self->{'legend_space'});
 
   # box the legend off
-  $self->{'gd_obj'}->setThickness($self->{'line_size'});
-  $self->{'gd_obj'}->rectangle ($x1, $y1, $x2, $y2, $misccolor);
-  $self->{'gd_obj'}->setThickness(1);
+  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
 
   # leave that nice space inside the legend box
   $x1 += $self->{'legend_space'};
@@ -2229,12 +2217,7 @@ sub _draw_left_legend {
     # get the color
     my $c = $self->{'num_datasets'}-$_-1;
     # color of the datasets in the legend
-   # if ($self->{'dataref'}[1][0] <0) {
-        $color = $self->_color_role_to_rgb('dataset'.$_);
-   # }
-   # else {
-   #     $color = $self->_color_role_to_rgb('dataset'.$c);
-   # }
+    $color = $self->_color_role_to_rgb('dataset'.$_);
 
     # find the x-y coords
     $x2 = $x1;
@@ -2242,7 +2225,11 @@ sub _draw_left_legend {
     $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
 
     # do the line first
-    $self->{'gd_obj'}->line ($x2, $y2, $x3, $y2, $color);
+	$self->{'surface'}->line(
+		$color,
+		$self->{'brush_size'},
+		$x2, $y2, 
+		$x3, $y2);
 
     # reset the brush for points
 #    $brush = $self->_prepare_brush($color, 'line',
@@ -2254,15 +2241,9 @@ sub _draw_left_legend {
     
     # now the label
     $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 -= $h/2;
+    $y2 += $h/2;
     # order of the datasets in the legend
-   # if ($self->{'dataref'}[1][0] <0) {
-   #    $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$_], $color);
-		$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
-   # }
-   # else {
-   #     $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$c], $color);
-   # }
+	$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
   }
 
   # mark off the used space
@@ -2287,7 +2268,7 @@ sub _draw_x_label {
   
   # get the size of the font
   #($h, $w) = ($font->height, $font->width);
-  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+  ($w,$h) = $self->string_bounds($font,$fsize,$label);
 
   # make sure it goes in the right place
   $x = ($self->{'curr_x_max'} - $self->{'curr_x_min'}) / 2
@@ -2327,7 +2308,7 @@ sub _draw_y_label {
   }
 
   # get the size of the label
-  ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+  ($w,$h) = $self->string_bounds($font,$fsize,$label);
 
   # make sure it goes in the right place
   if ($side eq 'left') {
@@ -2477,7 +2458,7 @@ sub _draw_x_number_ticks {
  #update the curr y max value
  $self->{'curr_y_max'} = $y1;
 
-warn "_draw_x_number_ticks: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
 
  #draw the ticks
  $y1 =$self->{'curr_y_max'};
@@ -2590,6 +2571,8 @@ sub _draw_x_ticks {
 		$self->{'x_ticks'} = 'staggered';
 	  }
   }
+
+trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-height=$h");
 
   # now draw the labels 
   if ($self->{'x_ticks'} =~ /^normal$/i) { # normal ticks
@@ -2757,9 +2740,8 @@ sub _draw_x_ticks {
   }
 
   # update the current y-max value
-print STDERR "_draw_x_ticks: curr_y_max=$self->{'curr_y_max'} => " if DEBUG;
   $self->{'curr_y_max'} -= $self->{'tick_len'};
-warn "$self->{'curr_y_max'}" if DEBUG;
+trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)}));
 
 }
 
@@ -2840,7 +2822,7 @@ sub _draw_y_ticks {
     # now draw the labels
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
       $y2 = $y1 - ($delta * $_) + $h;
 	  $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }
@@ -2857,7 +2839,7 @@ sub _draw_y_ticks {
     $delta = $height / ($self->{'y_ticks'} - 1);
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
       $y2 = $y1 - ($delta * $_) + $h;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor,$font,$fsize,$x2,$y2,0,$label);
@@ -2911,7 +2893,7 @@ sub _draw_y_ticks {
     # now draw the labels
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
       $y2 = $y1 - ($delta * $_) + $h;
       $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }   
@@ -2927,7 +2909,7 @@ sub _draw_y_ticks {
     $delta = $height / ($self->{'y_ticks'} - 1);
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
       $y2 = $y1 - ($delta * $_) + $h;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor, $font, $fsize, $x2, $y2, 0, $label);
@@ -3069,162 +3051,6 @@ sub _draw_y2_grid_lines {
    }
   }
   return 1;
-}
-
-##
-##  set the gdBrush object to trick GD into drawing fat lines & points
-##  of interesting shapes
-##
-##  Needed by "Lines", "Points" and "LinesPoints"
-##
-##  All hacked up by Richard Dice <rdice@pobox.com> Sunday 16 May 1999
-##
-sub _prepare_brush {
-
-    my $self      = shift;
-    my $color     = shift;
-    my $type      = shift;
-    my $typeStyle = shift;
-
-    # decide what $type should be in the event that a param isn't
-    # passed -- this is necessary to preserve backward compatibility
-    # with apps that use this module prior to putting _prepare_brush
-    # in with Base.pm
-    if ( (! length($type) ) ||
-         ( ! grep { $type eq $_ } ('line', 'point') ) ) {
-
-        $typeStyle = $type;
-        $type = 'line' if ref $self eq 'Chart::Lines';
-        $type = 'point' if ref $self eq 'Chart::Points';
-        # Chart::LinesPoints is expected to pass a $type param
-
-    }
-
-    my ($radius, @rgb, $brush, $white, $newcolor);
-
-    # get the rgb values for the desired color
-    @rgb = $self->{'gd_obj'}->rgb($color);
-
-    # get the appropriate brush size
-    if ($type eq 'line') {
-        $radius = $self->{'brush_size'}/1.5;
-    } elsif ($type eq 'point') {
-        $radius = $self->{'pt_size'}/1.5;
-    }
-
-    # create the new image
-    $brush = GD::Image->new ($radius*2, $radius*2);
-
-    # get the colors, make the background transparent
-    $white    = $brush->colorAllocate (255,255,255);
-    $newcolor = $brush->colorAllocate (@rgb);
-    $brush->transparent ($white);
-
-    # draw the circle
-    if ( $type eq 'line') {
-        $brush->arc ($radius-1, $radius-1, $radius, $radius, 0, 360, $newcolor);
-        $brush->fill ($radius-1, $radius-1, $newcolor);
-
-        # RLD
-        #
-        # Does $brush->fill really have to be here?  Dunno... this
-        # seems to be a relic from earlier code
-        #
-        # Note that 'line's don't benefit from a $typeStyle... yet.
-        # It shouldn't be too tough to hack this in by taking advantage
-        # of GD's gdStyled facility
-
-    }
-
-    if ( $type eq 'point' ) {
-		$typeStyle = 'default' if(
-			!defined($typeStyle) ||
-			$typeStyle !~ /^circle|donut|triangle|upsidedownTriangle|square|hollowSquare|fatPlus$/
-		);
-
-        my ($xc, $yc) = ($radius-1, $radius-1);
-
-        # Note that 'default' will produce the same effect
-        # as a 'circle' typeStyle
-        if ( grep { $typeStyle eq $_ } ('default', 'circle', 'donut') ) {
-
-            $brush->arc($xc, $yc, $radius, $radius, 0, 360, $newcolor);
-            $brush->fill ($xc, $yc, $newcolor);
-
-            # draw a white (and therefore transparent) circle in the middle
-            # of the existing circle to make the "donut", if appropriate
-
-            if ( $typeStyle eq 'donut' ) {
-                $brush->arc($xc, $yc, int($radius/2), int($radius/2),
-                            0, 360, $white);
-                $brush->fill ($xc, $yc, $white);
-            }
-        }
-
-        if ( grep { $typeStyle eq $_ } ('triangle', 'upsidedownTriangle' ) ){
-
-            my $poly = new GD::Polygon;
-            my $sign = ( $typeStyle eq 'triangle' ) ? 1 : (-1);
-            my $z = int (0.8 * $radius); # scaling factor
-
-            # co-ords are chosen to make an equilateral triangle
-
-            $poly->addPt($xc,
-                         $yc - ($z * $sign));
-            $poly->addPt($xc + int((sqrt(3) * $z) / 2),
-                         $yc + (int($z/2) * $sign));
-            $poly->addPt($xc - int((sqrt(3) * $z) / 2),
-                         $yc + (int($z/2) * $sign));
-
-            $brush->filledPolygon($poly, $newcolor);
-        }
-
-        if ( $typeStyle eq 'fatPlus' ) {
-
-            my $poly = new GD::Polygon;
-
-            my $z = int(0.3 * $radius);
-
-            $poly->addPt($xc +     $z, $yc + $z);
-            $poly->addPt($xc + 2 * $z, $yc + $z);
-            $poly->addPt($xc + 2 * $z, $yc - $z);
-
-            $poly->addPt($xc + $z,     $yc - $z);
-            $poly->addPt($xc + $z,     $yc - 2 * $z);
-            $poly->addPt($xc - $z,     $yc - 2 * $z);
-
-            $poly->addPt($xc -     $z, $yc - $z);
-            $poly->addPt($xc - 2 * $z, $yc - $z);
-            $poly->addPt($xc - 2 * $z, $yc + $z);
-
-            $poly->addPt($xc - $z,     $yc + $z);
-            $poly->addPt($xc - $z,     $yc + 2 * $z);
-            $poly->addPt($xc + $z,     $yc + 2 * $z);
-            $brush->filledPolygon($poly, $newcolor);
-        }
-
-        if ( grep { $typeStyle eq $_ } ('square', 'hollowSquare') ) {
-
-            my $poly = new GD::Polygon;
-            my $z = int (0.5 * $radius);
-
-            $brush->filledRectangle($xc - $z, $yc - $z,
-                                    $xc + $z, $yc + $z,
-                                    $newcolor);
-
-            if ( $typeStyle eq 'hollowSquare' ) {
-
-                $z = int($z/2);
-
-                $brush->filledRectangle($xc - $z, $yc - $z,
-                                        $xc + $z, $yc + $z,
-                                        $white);
-            }
-        }
-    }
-
-    # set the new image as the main object's brush
-    return $brush;
 }
 
 #

@@ -181,13 +181,28 @@ sub png
 # need to use a transform to make an arc with cairo
 sub _arc
 {
-	my( $self, $x, $y, $w, $h, $s, $e ) = @_;
+	my( $self, $x, $y, $w, $h, $s, $e, $new_path ) = @_;
 
 	return (
 		save => [],
 		translate => [$x - .5, $y],
 		scale => [$w/2 - .5, $h/2],
+		($new_path ? (new_sub_path => []) : ()),
 		arc => [0, 0, 1, $s, $e ],
+		restore => [],
+	);
+}
+
+sub _arc_negative
+{
+	my( $self, $x, $y, $w, $h, $s, $e, $new_path ) = @_;
+
+	return (
+		save => [],
+		translate => [$x - .5, $y],
+		scale => [$w/2 - .5, $h/2],
+		($new_path ? (new_sub_path => []) : ()),
+		arc_negative => [0, 0, 1, $s, $e ],
 		restore => [],
 	);
 }
@@ -311,14 +326,26 @@ Draw a filled segment whose origin is $x,$y of dimensions $w,$h starting at $s c
 
 sub filled_segment
 {
-	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e ) = @_;
+	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e, $cw, $ch ) = @_;
 
 	my $ops = [];
 	push @$ops,
 		$self->_color( $color ),
 		$self->_line( $thickness ),
 		move_to => [$x,$y],
-		$self->_arc( $x, $y, $w, $h, $s, $e );
+		$self->_arc( $x, $y, $w, $h, $s, $e, 1 );
+
+	if( !defined $cw || !defined $ch )
+	{
+		push @$ops, line_to => [$x,$y];
+	}
+	else
+	{
+		push @$ops,
+			$self->_arc_negative( $x, $y, $cw, $ch, $e, $s );
+	}
+
+	push @$ops, close_path => [];
 
 	$self->_fill( $ops );
 	$self->_stroke( $ops ) if $thickness != 0;
@@ -399,14 +426,26 @@ Draw a segment whose origin is $x,$y of dimensions $w,$h starting at $s clockwis
 
 sub segment
 {
-	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e ) = @_;
+	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e, $cw, $ch ) = @_;
 
 	my $ops = [];
 	push @$ops,
 		$self->_color( $color ),
 		$self->_line( $thickness ),
 		move_to => [$x,$y],
-		$self->_arc( $x, $y, $w, $h, $s, $e );
+		$self->_arc( $x, $y, $w, $h, $s, $e, 1 );
+
+	if( !defined $cw || !defined $ch )
+	{
+		push @$ops, line_to => [$x,$y];
+	}
+	else
+	{
+		push @$ops,
+			$self->_arc_negative( $x, $y, $cw, $ch, $e, $s );
+	}
+
+	push @$ops, close_path => [];
 
 	$self->_stroke( $ops );
 }

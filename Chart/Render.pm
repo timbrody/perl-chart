@@ -128,15 +128,17 @@ sub filled_rectangle($$$$$$$)
 	my( $self, $color, $thickness, $x, $y, $x2, $y2 ) = @_;
 }
 
-=item $r->filled_segment( $color, $thickness, $x, $y, $w, $h, $s, $e )
+=item $r->filled_segment( $color, $thickness, $x,$y, $w,$h, $s,$e [, $cw,$ch ] )
 
 Draw a filled segment whose origin is $x,$y of dimensions $w,$h starting at $s clockwise to $e (in radians).
+
+If $cw,$ch are given these are used as a core radius from which to start the segment (creating a doughnut slice).
 
 =cut
 
 sub filled_segment
 {
-	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e ) = @_;
+	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e, $cw, $ch ) = @_;
 }
 
 =item $r->line( $color, $thickness, $x, $y, $x2, $y2 )

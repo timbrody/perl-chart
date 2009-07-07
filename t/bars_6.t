@@ -32,7 +32,7 @@ $g->set(
             spaced_bars        => 'true',
             text_space         => 3,
             title              => "Tickets",
-            title_font         => GD::Font->Giant,
+#            title_font         => GD::Font->Giant,
             transparent        => 'false',
             x_ticks            => 'vertical',
             y_axes             => 'both',

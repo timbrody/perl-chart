@@ -127,3 +127,150 @@ sub _gd_string_dimensions {
 	return ($bounds[2],$bounds[1]-$bounds[5],-1*$bounds[5]); # Height excludes below the base line
 }
 
+sub _prepare_brush {
+
+    my $self      = shift;
+    my $color     = shift;
+    my $type      = shift;
+    my $typeStyle = shift;
+
+    # decide what $type should be in the event that a param isn't
+    # passed -- this is necessary to preserve backward compatibility
+    # with apps that use this module prior to putting _prepare_brush
+    # in with Base.pm
+    if ( (! length($type) ) ||
+         ( ! grep { $type eq $_ } ('line', 'point') ) ) {
+
+        $typeStyle = $type;
+        $type = 'line' if ref $self eq 'Chart::Lines';
+        $type = 'point' if ref $self eq 'Chart::Points';
+        # Chart::LinesPoints is expected to pass a $type param
+
+    }
+
+    my ($radius, @rgb, $brush, $white, $newcolor);
+
+    # get the rgb values for the desired color
+    @rgb = $self->{'gd_obj'}->rgb($color);
+
+    # get the appropriate brush size
+    if ($type eq 'line') {
+        $radius = $self->{'brush_size'}/1.5;
+    } elsif ($type eq 'point') {
+        $radius = $self->{'pt_size'}/1.5;
+    }
+
+    # create the new image
+    $brush = GD::Image->new ($radius*2, $radius*2);
+
+    # get the colors, make the background transparent
+    $white    = $brush->colorAllocate (255,255,255);
+    $newcolor = $brush->colorAllocate (@rgb);
+    $brush->transparent ($white);
+
+    # draw the circle
+    if ( $type eq 'line') {
+        $brush->arc ($radius-1, $radius-1, $radius, $radius, 0, 360, $newcolor);
+        $brush->fill ($radius-1, $radius-1, $newcolor);
+
+        # RLD
+        #
+        # Does $brush->fill really have to be here?  Dunno... this
+        # seems to be a relic from earlier code
+        #
+        # Note that 'line's don't benefit from a $typeStyle... yet.
+        # It shouldn't be too tough to hack this in by taking advantage
+        # of GD's gdStyled facility
+
+    }
+
+    if ( $type eq 'point' ) {
+		$typeStyle = 'default' if(
+			!defined($typeStyle) ||
+			$typeStyle !~ /^circle|donut|triangle|upsidedownTriangle|square|hollowSquare|fatPlus$/
+		);
+
+        my ($xc, $yc) = ($radius-1, $radius-1);
+
+        # Note that 'default' will produce the same effect
+        # as a 'circle' typeStyle
+        if ( grep { $typeStyle eq $_ } ('default', 'circle', 'donut') ) {
+
+            $brush->arc($xc, $yc, $radius, $radius, 0, 360, $newcolor);
+            $brush->fill ($xc, $yc, $newcolor);
+
+            # draw a white (and therefore transparent) circle in the middle
+            # of the existing circle to make the "donut", if appropriate
+
+            if ( $typeStyle eq 'donut' ) {
+                $brush->arc($xc, $yc, int($radius/2), int($radius/2),
+                            0, 360, $white);
+                $brush->fill ($xc, $yc, $white);
+            }
+        }
+
+        if ( grep { $typeStyle eq $_ } ('triangle', 'upsidedownTriangle' ) ){
+
+            my $poly = new GD::Polygon;
+            my $sign = ( $typeStyle eq 'triangle' ) ? 1 : (-1);
+            my $z = int (0.8 * $radius); # scaling factor
+
+            # co-ords are chosen to make an equilateral triangle
+
+            $poly->addPt($xc,
+                         $yc - ($z * $sign));
+            $poly->addPt($xc + int((sqrt(3) * $z) / 2),
+                         $yc + (int($z/2) * $sign));
+            $poly->addPt($xc - int((sqrt(3) * $z) / 2),
+                         $yc + (int($z/2) * $sign));
+
+            $brush->filledPolygon($poly, $newcolor);
+        }
+
+        if ( $typeStyle eq 'fatPlus' ) {
+
+            my $poly = new GD::Polygon;
+
+            my $z = int(0.3 * $radius);
+
+            $poly->addPt($xc +     $z, $yc + $z);
+            $poly->addPt($xc + 2 * $z, $yc + $z);
+            $poly->addPt($xc + 2 * $z, $yc - $z);
+
+            $poly->addPt($xc + $z,     $yc - $z);
+            $poly->addPt($xc + $z,     $yc - 2 * $z);
+            $poly->addPt($xc - $z,     $yc - 2 * $z);
+
+            $poly->addPt($xc -     $z, $yc - $z);
+            $poly->addPt($xc - 2 * $z, $yc - $z);
+            $poly->addPt($xc - 2 * $z, $yc + $z);
+
+            $poly->addPt($xc - $z,     $yc + $z);
+            $poly->addPt($xc - $z,     $yc + 2 * $z);
+            $poly->addPt($xc + $z,     $yc + 2 * $z);
+            $brush->filledPolygon($poly, $newcolor);
+        }
+
+        if ( grep { $typeStyle eq $_ } ('square', 'hollowSquare') ) {
+
+            my $poly = new GD::Polygon;
+            my $z = int (0.5 * $radius);
+
+            $brush->filledRectangle($xc - $z, $yc - $z,
+                                    $xc + $z, $yc + $z,
+                                    $newcolor);
+
+            if ( $typeStyle eq 'hollowSquare' ) {
+
+                $z = int($z/2);
+
+                $brush->filledRectangle($xc - $z, $yc - $z,
+                                        $xc + $z, $yc + $z,
+                                        $white);
+            }
+        }
+    }
+
+    # set the new image as the main object's brush
+    return $brush;
+}

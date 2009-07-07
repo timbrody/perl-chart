@@ -6,6 +6,7 @@
 #======================================================================
 
 use strict;
+#use Chart::Debug qw(+trace);
 use Chart::Lines;
 
 print "1..1\n";
@@ -76,13 +77,13 @@ for ( my $x_idx = 0; $x_idx <= $#x_values; $x_idx++ ) {
 	$graphic -> set ('y_label' => 'f = 1/x' );
 
 
-	if ( $graphic -> can ('gif') ){
-		my $picture_file = "samples/Math_1_over_x.gif";
-		$graphic -> gif ($picture_file);
-	}
 	if ( $graphic -> can ('png') ) {
 		my $picture_file = "samples/Math_1_over_x.png";
 		$graphic -> png ($picture_file);
+	}
+	elsif ( $graphic -> can ('gif') ){
+		my $picture_file = "samples/Math_1_over_x.gif";
+		$graphic -> gif ($picture_file);
 	}
 	
 
