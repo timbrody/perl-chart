@@ -31,15 +31,18 @@ use strict;
 #  public methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
+my @shapes = qw( circle donut triangle upsidedownTriangle square hollowSquare fatPlus );
+
 sub _init
 {
 	my $self = shift;
 
 	$self->SUPER::_init( @_ );
 
+
 	for(1..10)
 	{
-		$self->{"pointStyle$_"} = "circle";
+		$self->{"pointStyle$_"} = $shapes[$_ % @shapes]
 	}
 }
 

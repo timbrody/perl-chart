@@ -173,9 +173,18 @@ sub point
 {
 	my( $self, $color, $size, $x, $y, $shape ) = @_;
 
+	my $line_size = $size / 6;
+	$line_size = 1 if $line_size < 1.0;
+
 	if( $shape eq "circle" )
 	{
-		$self->filled_arc( $color, 0, $x, $y, $size, $size, 0, 2*pi );
+		$size -= $line_size/2;
+		$self->filled_arc( $color, -1, $x, $y, $size, $size, 0, 2*pi );
+	}
+	elsif( $shape eq "donut" )
+	{
+		$size -= $line_size/2;
+		$self->arc( $color, -1 * $line_size, $x, $y, $size, $size, 0, 2*pi );
 	}
 	elsif( $shape eq "square" )
 	{
@@ -185,15 +194,40 @@ sub point
 		my $y2 = $y + $size/2;
 		$self->filled_rectangle( $color, 0, $x1, $y1, $x2, $y2 );
 	}
+	elsif( $shape eq "hollowSquare" )
+	{
+		my $x1 = $x - $size/2 + $line_size/2;
+		my $y1 = $y - $size/2 + $line_size/2;
+		my $x2 = $x + $size/2 - $line_size/2;
+		my $y2 = $y + $size/2 - $line_size/2;
+		$self->rectangle( $color, $line_size, $x1, $y1, $x2, $y2 );
+	}
 	elsif( $shape eq "triangle" )
 	{
+		$size -= $line_size/2;
 		my @points = (
 			[$x, $y - $size/2],
 			[$x - $size/2, $y + $size/2],
 			[$x + $size/2, $y + $size/2],
 		);
 
-		$self->filled_polygon( $color, 0, \@points );
+		$self->filled_polygon( $color, -1, \@points );
+	}
+	elsif( $shape eq "upsidedownTriangle" )
+	{
+		$size -= $line_size/2;
+		my @points = (
+			[$x, $y + $size/2],
+			[$x + $size/2, $y - $size/2],
+			[$x - $size/2, $y - $size/2],
+		);
+
+		$self->filled_polygon( $color, -1, \@points );
+	}
+	elsif( $shape eq "fatPlus" )
+	{
+		$self->line( $color, $line_size, $x, $y - $size/2, $x, $y + $size/2 );
+		$self->line( $color, $line_size, $x - $size/2, $y, $x + $size/2, $y );
 	}
 	else
 	{

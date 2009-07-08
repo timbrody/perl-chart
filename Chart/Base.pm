@@ -769,6 +769,7 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
 	y_axis2 => 'black',
     grid_lines	=> 'black',
     grey_background => 'grey',
+	legend_background => 'grey',
     (map { ('dataset'.$d => $_, 'neg_dataset'.$d++ => $_) }
 		qw( red green blue purple peach orange mauve olive pink light_purple light_blue plum yellow turquoise light_green brown 
 		HotPink PaleGreen1 DarkBlue BlueViolet orange2 chocolate1 LightGreen pink light_purple light_blue plum yellow turquoise light_green brown 
@@ -1864,6 +1865,63 @@ sub _draw_legend {
   return 1;
 }
 
+sub _draw_legend_box {
+	my( $self, $x, $y, $x2, $y2 ) = @_;
+
+	my $line_size = $self->{'line_size'};
+	# get the miscellaneous color
+	my $misccolor = $self->_color_role_to_rgb('misc');
+
+	if( $self->{'legend_background'} )
+	{
+		$self->{'surface'}->filled_rectangle(
+				$self->_color_role_to_rgb('legend_background'),
+				0,
+				$x, $y, $x2, $y2);
+	}
+
+	$self->{'surface'}->rectangle(
+			$misccolor,
+			$line_size,
+			$x, $y, $x2, $y2);
+}
+
+sub _draw_legend_entry_example {
+	my( $self, $color, $x, $y, $h, $shape ) = @_;
+
+	my $legend_example_size = $self->{'legend_example_size'};
+
+	$y -= $h/2; # vertically centre the example
+
+	# draw the example line
+	$self->{'surface'}->line($color,
+			$h/4,
+			$x, $y, 
+			$x + $legend_example_size, $y);
+
+	# draw the point
+	if( defined $shape )
+	{
+		my $x3 = $x + $legend_example_size/2;
+		$self->{'surface'}->point($color,$h,$x3,$y,$shape);
+	}
+}
+
+sub _draw_legend_entry {
+	my( $self, $color, $x, $y, $h, $shape, $label ) = @_;
+
+	my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+	my $misccolor = $self->_color_role_to_rgb('misc');
+
+	$self->_draw_legend_entry_example($color, $x, $y, $h, $shape);
+
+	# adjust the x-y coordinates for the start of the label
+	$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
+
+	# now draw the label
+	$self->{'surface'}->string($misccolor, $font, $fsize, $x, $y, 0, $label);
+}
+
 ## put the legend on the bottom of the chart
 sub _draw_bottom_legend {
   my ($self,$x1,$x2) = @_;
@@ -1905,10 +1963,7 @@ sub _draw_bottom_legend {
   $y1 = $self->{'curr_y_max'} - $self->{'text_space'}
           - ($rows * $row_height) - (2 * $self->{'legend_space'});
   $y2 = $self->{'curr_y_max'};
-  $self->{'surface'}->rectangle(
-		$misccolor,
-		$self->{'line_size'},
-  		$x1, $y1, $x2, $y2);
+  $self->_draw_legend_box( $x1, $y1, $x2, $y2 );
   $x1 += $self->{'legend_space'} + $self->{'text_space'};
   $x2 -= $self->{'legend_space'};
   $y1 += $self->{'legend_space'} + $self->{'text_space'};
@@ -1919,34 +1974,17 @@ sub _draw_bottom_legend {
     for $c (0..$cols-1) {
       $index = ($r * $cols) + $c;  # find the index in the label array
       if ($labels[$index]) {
-	# get the color
+		# get the color
         $color = $self->_color_role_to_rgb('dataset'.$index); 
 
         # get the x-y coordinate for the start of the example line
 		$x = $x1 + ($col_width * $c);
-        $y = $y1 + ($row_height * $r) + $h/2;
+        $y = $y1 + ($row_height * $r) + $h;
 	
-		# now draw the example line
-        $self->{'surface'}->line($color,
-								$self->{'brush_size'},
-								$x, $y, 
-                                $x + $self->{'legend_example_size'}, $y);
-
-        # reset the brush for points
-        # draw the point
+        # get the shape style (if any)
 		my $shape = $self->{'pointStyle'.($index+1)};
-		if( defined $shape )
-		{
-			$x3 = int($x + $self->{'legend_example_size'}/2);
-			$self->{'surface'}->point($color,$self->{'legend_example_size'},$x3,$y,$shape);
-		}
 
-        # adjust the x-y coordinates for the start of the label
-		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-		$y += $h/2;
-
-		# now draw the label
-		$self->{'surface'}->string($misccolor, $font, $fsize, $x, $y, 0, $labels[$index]);
+		$self->_draw_legend_entry($color, $x, $y, $h, $shape, $labels[$index]);
       }
     }
   }
@@ -1990,45 +2028,27 @@ sub _draw_right_legend {
 	  + (2 * $self->{'legend_space'});
 
   # box the legend off
-  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
+  $self->_draw_legend_box( $x1, $y1, $x2, $y2 );
 
   # leave that nice space inside the legend box
   $x1 += $self->{'legend_space'};
   $y1 += $self->{'legend_space'} + $self->{'text_space'};
 
+	my $row_height = $self->{'text_space'} + $h;
+
   # now draw the actual legend
-  for (0..$#labels) {
-    # get the color
-    my $c = $self->{'num_datasets'}-$_-1;
-    # color of the datasets in the legend
-   # if ($self->{'dataref'}[1][0] < 0) {
-        $color = $self->_color_role_to_rgb('dataset'.$_);
-   # }
-   # else {	
-   #     $color = $self->_color_role_to_rgb('dataset'.$c);
-   #}
+  foreach my $index (0..$#labels) {
+# color of the datasets in the legend
+	  $color = $self->_color_role_to_rgb('dataset'.$index);
 
-    # find the x-y coords
-    $x2 = $x1;
-    $x3 = $x2 + $self->{'legend_example_size'};
-    $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
+# find the x-y coords
+	  my $x = $x1;
+	  my $y = $y1 + ($index * $row_height) + $h;
 
-    # do the line first
-    $self->{'surface'}->line($color, $self->{'brush_size'}, $x2, $y2, $x3, $y2);
+# get the shape style (if any)
+	  my $shape = $self->{'pointStyle'.($index+1)};
 
-    # reset the brush for points
-#    $brush = $self->_prepare_brush($color, 'point',
-#				$self->{'pointStyle' . $_});
-#    $self->{'gd_obj'}->setBrush($brush);
-    # draw the point
-#    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-#				int(($x3+$x2)/2), $y2, gdBrushed);
-
-    # now the label
-    $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 += $h/2;
-    # order of the datasets in the legend
-	$self->{'surface'}->string($misccolor, $font, $fsize, $x2, $y2, 0, $labels[$_]);
+	  $self->_draw_legend_entry($color, $x, $y, $h, $shape, $labels[$index]);
   }
 
   # mark off the used space
@@ -2078,7 +2098,7 @@ sub _draw_top_legend {
   $y1 = $self->{'curr_y_min'};
   $y2 = $self->{'curr_y_min'} + $self->{'text_space'}
           + ($rows * $row_height) + (2 * $self->{'legend_space'});
-  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
+  $self->_draw_legend_box( $x1, $y1, $x2, $y2 );
 
   # leave some space inside the legend
   $x1 += $self->{'legend_space'} + $self->{'text_space'};
@@ -2096,27 +2116,12 @@ sub _draw_top_legend {
         
 	# find the x-y coords
 	$x = $x1 + ($col_width * $c);
-        $y = $y1 + ($row_height * $r) + $h/2;
+        $y = $y1 + ($row_height * $r) + $h;
+	
+        # get the shape style (if any)
+		my $shape = $self->{'pointStyle'.($index+1)};
 
-	# draw the line first
-        $self->{'surface'}->line(
-			$color,
-			$self->{'brush_size'},
-			$x, $y, 
-			$x + $self->{'legend_example_size'}, $y);
-
-        # reset the brush for points
-#        $brush = $self->_prepare_brush($color, 'point',
-#				$self->{'pointStyle' . $index});
-#        $self->{'gd_obj'}->setBrush($brush);
-        # draw the point
-#        $x3 = int($x + $self->{'legend_example_size'}/2);
-#        $self->{'surface'}->line( gdBrushed,$line_size,$x3, $y, $x3, $y);
-
-        # now the label
-		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-		$y += $h/2;
-		$self->{'surface'}->string($misccolor, $font, $fsize, $x, $y, 0, $labels[$index]);
+		$self->_draw_legend_entry($color, $x, $y, $h, $shape, $labels[$index]);
       }
     }
   }
@@ -2160,44 +2165,27 @@ sub _draw_left_legend {
 	  + (2 * $self->{'legend_space'});
 
   # box the legend off
-  $self->{'surface'}->rectangle($misccolor, $line_size, $x1, $y1, $x2, $y2);
+  $self->_draw_legend_box( $x1, $y1, $x2, $y2 );
 
   # leave that nice space inside the legend box
   $x1 += $self->{'legend_space'};
   $y1 += $self->{'legend_space'} + $self->{'text_space'};
 
+	my $row_height = $self->{'text_space'} + $h;
+
   # now draw the actual legend
-  for (0..$#labels) {
-    # get the color
-    my $c = $self->{'num_datasets'}-$_-1;
-    # color of the datasets in the legend
-    $color = $self->_color_role_to_rgb('dataset'.$_);
+  foreach my $index (0..$#labels) {
+# color of the datasets in the legend
+	  $color = $self->_color_role_to_rgb('dataset'.$index);
 
-    # find the x-y coords
-    $x2 = $x1;
-    $x3 = $x2 + $self->{'legend_example_size'};
-    $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
+# find the x-y coords
+	  my $x = $x1;
+	  my $y = $y1 + ($index * $row_height) + $h;
 
-    # do the line first
-	$self->{'surface'}->line(
-		$color,
-		$self->{'brush_size'},
-		$x2, $y2, 
-		$x3, $y2);
+# get the shape style (if any)
+	  my $shape = $self->{'pointStyle'.($index+1)};
 
-    # reset the brush for points
-#    $brush = $self->_prepare_brush($color, 'line',
-#				$self->{'pointStyle' . $_});
-#    $self->{'gd_obj'}->setBrush($brush);
-    # draw the point
-#    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-#				int(($x3+$x2)/2), $y2, gdBrushed);
-    
-    # now the label
-    $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 += $h/2;
-    # order of the datasets in the legend
-	$self->{'surface'}->string($misccolor, $font, $fsize, $x2, $y2, 0, $labels[$_]);
+	  $self->_draw_legend_entry($color, $x, $y, $h, $shape, $labels[$index]);
   }
 
   # mark off the used space

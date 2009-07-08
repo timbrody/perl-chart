@@ -60,6 +60,28 @@ Vertical bar chart.
 #  private methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
+sub _draw_legend_entry_example {
+	my( $self, $color, $x, $y, $h, $shape ) = @_;
+
+	my $legend_example_size = $self->{'legend_example_size'};
+	my $misccolor = $self->_color_role_to_rgb('misc');
+
+	my $x2 = $x + $legend_example_size;
+	my $y2 = $y;
+	$y -= $h;
+
+	# draw a square for bars
+	$self->{'surface'}->filled_rectangle($color,
+			0,
+			$x, $y, 
+			$x2, $y2);
+
+	$self->{'surface'}->rectangle($misccolor,
+			$self->{'line_size'},
+			$x, $y, 
+			$x2, $y2);
+}
+
 ## finally get around to plotting the data
 sub _draw_data {
   my $self = shift;
