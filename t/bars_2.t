@@ -25,6 +25,7 @@ $g->add_dataset (17, 5, 7, 2, 6);
          'x_label' => 'City',
 	 'y_label' => 'Number of Cars',
          'legend' => 'bottom',
+		 'legend_background' => 'true',
          'legend_labels'  => ['January' , 'February' , 'March', 'April', 'May', 'June',
                               'July', 'August' , 'September' , 'October', 'November', 'December'],
          'grid_lines' =>'true',
@@ -35,6 +36,7 @@ $g->add_dataset (17, 5, 7, 2, 6);
                       'y_label' => 'blue',
 		      'background' => 'grey',
 		      'text'    => 'blue',
+			  'legend_background' => [255,255,255],
 	 	      },
           
 	 );
