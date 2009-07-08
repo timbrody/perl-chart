@@ -35,8 +35,9 @@
 package Chart::Mountain;
 
 use Chart::Base 3.0;
+use Chart::Lines;
 
-@ISA = qw( Chart::Base );
+@ISA = qw( Chart::Lines );
 $VERSION = $Chart::Base::VERSION;
 
 use strict;

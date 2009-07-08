@@ -27,8 +27,6 @@ $VERSION = $Chart::Base::VERSION;
 
 use strict;
 
-use constant DEBUG => 0;
-
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<#
