@@ -550,55 +550,6 @@ sub imagemap_dump {
 #  private methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
-=pod
-
-=head1 GENERAL OPTIONS
-
-To modify the appearance of Chart use the set() method.
-
-	$obj->set(
-		text_space => 2,
-		legend => 'bottom'
-	);
-
-=over 4
-
-=item f_x_tick => sub {}
-
-=item f_y_tick => sub {}
-
-=item f_z_tick => sub {}
-
-Customize the value shown on an axis. The sub reference takes one argument (the value to be rendered).
-
-=item x_ticks => { normal, staggered, vertical }
-
-Show x-axis labels normal (horizontal), staggered, or vertical.
-
-=item max_y_ticks => int
-
-The maximum number of ticks to plot on the y scale, including the end points. e.g. If the scale runs from 0 to 50, with ticks every 10, max_y_ticks will have the value of 6.
-
-=item legend => { right, left, bottom, top, none }
-
-Legend placement, or 'none' to not display.
-
-=item x_axis => { none }
-
-Supress drawing of the x-axis;
-
-=item y_axis => { none }
-
-Supress drawing of the y-axis;
-
-=item draw_box => { none }
-
-Supress drawing of the box around the plot.
-
-=back
-
-=cut
-
 ##  initialize all the default options here
 sub _init {
   my $self = shift;
@@ -2550,11 +2501,9 @@ sub _draw_x_ticks {
 		$x1 += $delta/2;
 	}
 
-  if ( ! defined($self->{'skip_x_ticks'}) ) {
-     $self->{'skip_x_ticks'} = 1;
-  } elsif ( $self->{'skip_x_ticks'} == 0 ) {
-     $self->{'skip_x_ticks'} = 1;
-  }
+	if( defined($self->{'skip_x_ticks'}) && $self->{'skip_x_ticks'} == 0 ) {
+		$self->{'skip_x_ticks'} = 1;
+	}
 
   # Change to staggered if the labels would overlap in 'normal' mode
   if( $self->{'x_ticks'} =~ /^normal$/i ) {
@@ -3065,8 +3014,64 @@ sub _default_f_tick {
 }
 
 
+=back
 
+=head1 COMMON PROPERTIES
 
+To modify the appearance of Chart use the set() method.
+
+	$obj->set(
+		text_space => 2,
+		legend => 'bottom'
+	);
+
+=over 4
+
+=item draw_box => "none"
+
+Supress drawing of the box around the plot.
+
+=item f_x_tick => sub {}
+
+=item f_y_tick => sub {}
+
+=item f_z_tick => sub {}
+
+Customize the value shown on an axis. The sub reference takes one argument (the value to be rendered).
+
+=item legend => "right"
+
+Legend placement. "right", "left", "bottom", "top" or "none" to not display.
+
+=item max_y_ticks => 6
+
+The maximum number of ticks to plot on the y scale, including the end points. e.g. If the scale runs from 0 to 50, with ticks every 10, max_y_ticks will have the value of 6.
+
+=item title
+
+Title for the chart.
+
+=item x_axis => "none"
+
+Supress drawing of the x-axis;
+
+=item x_label
+
+Label for the x-axis.
+
+=item x_ticks => { "normal", "staggered", "vertical" }
+
+Show x-axis labels normal (horizontal), staggered, or vertical.
+
+=item y_axis => "none"
+
+Supress drawing of the y-axis.
+
+=item y_label, y_label2
+
+Labels for the left and right y-axes.
+
+=cut
 
 
 ## be a good module and return positive
