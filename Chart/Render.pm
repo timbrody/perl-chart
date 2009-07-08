@@ -84,6 +84,17 @@ sub arc($$$$$$$$$)
 	my( $self, $color, $thickness, $x, $y, $w, $h, $s, $e ) = @_;
 }
 
+=item $r->clip( $x, $y, $x2, $y2 )
+
+Set a rectangular clipping region between $x,$y and $x2,$y2. While this is in effect nothing can be drawn beyond this region.
+
+=cut
+
+sub clip
+{
+	my( $self, $x, $y, $x2, $y2 ) = @_;
+}
+
 =item $r->continuous( $color, $thickness, $points )
 
 Draw a continuous line along $points.
@@ -210,6 +221,17 @@ Draw a rectangle between ($x,$y) and ($x2,$y2).
 sub rectangle($$$$$$$)
 {
 	my( $self, $color, $thickness, $x, $y, $x2, $y2 ) = @_;
+}
+
+=item $r->reset_clip()
+
+Remove the current clipping region.
+
+=cut
+
+sub reset_clip
+{
+	my( $self ) = @_;
 }
 
 =item $r->segment( $color, $font, $thickness, $x, $y, $w, $h, $s, $e )

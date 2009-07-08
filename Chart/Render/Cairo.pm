@@ -80,6 +80,11 @@ sub _ops
 
 	my $ctx = $self->{ctx};
 	$ctx->save();
+	if( defined $self->{_clip} )
+	{
+		$ctx->rectangle( @{$self->{_clip}} );
+		$ctx->clip();
+	}
 	for(my $i = 0; $i < @$ops; $i+=2)
 	{
 		my( $f, $params ) = @$ops[$i,$i+1];
@@ -224,6 +229,23 @@ sub arc($$$$$$$$$)
 		$self->_arc( $x, $y, $w, $h, $s, $e );
 
 	$self->_stroke( $ops );
+}
+
+=item $r->clip( $x, $y, $x2, $y2 )
+
+Set a rectangular clipping region between $x,$y and $x2,$y2. While this is in effect nothing can be drawn beyond this region.
+
+=cut
+
+sub clip
+{
+	my( $self, $x, $y, $x2, $y2 ) = @_;
+
+	my $t;
+	$t = $y, $y = $y2, $y2 = $t if $y2 < $y;
+	$t = $x, $x = $x2, $x2 = $t if $x2 < $x;
+
+	$self->{_clip} = [$x,$y,$x2-$x,$y2-$y];
 }
 
 =item $r->continuous( $color, $thickness, $points )
@@ -416,6 +438,19 @@ sub rectangle($$$$$$$)
 		rectangle => [$x,$y,$x2-$x,$y2-$y];
 
 	$self->_stroke( $ops );
+}
+
+=item $r->reset_clip()
+
+Remove the current clipping region.
+
+=cut
+
+sub reset_clip
+{
+	my( $self ) = @_;
+
+	undef $self->{_clip};
 }
 
 =item $r->segment( $color, $font, $thickness, $x, $y, $w, $h, $s, $e )
