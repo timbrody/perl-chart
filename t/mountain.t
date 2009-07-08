@@ -2,6 +2,7 @@
 
 use Chart::Mountain;         
 use File::Spec;
+use GD;
 
 print "1..2\n";
 

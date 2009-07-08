@@ -1,6 +1,7 @@
 #!/usr/bin/perl -w
 
 use Chart::Mountain;         
+use GD;
 use File::Spec;
 
 print "1..2\n";
