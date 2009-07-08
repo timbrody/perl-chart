@@ -1877,6 +1877,9 @@ sub _draw_bottom_legend {
   # ($h, $w) = ($font->height, $font->width);
   $h = $self->{'max_legend_label_height'};
 
+  # get the miscellaneous color
+  $misccolor = $self->_color_role_to_rgb('misc');
+
   # figure out how wide the columns need to be, and how many we
   # can fit in the space available
   $empty_width = ($x2 - $x1) - (2 * $self->{'legend_space'});
@@ -1903,7 +1906,7 @@ sub _draw_bottom_legend {
           - ($rows * $row_height) - (2 * $self->{'legend_space'});
   $y2 = $self->{'curr_y_max'};
   $self->{'surface'}->rectangle(
-		$self->_color_role_to_rgb('misc'),
+		$misccolor,
 		$self->{'line_size'},
   		$x1, $y1, $x2, $y2);
   $x1 += $self->{'legend_space'} + $self->{'text_space'};
@@ -1943,7 +1946,7 @@ sub _draw_bottom_legend {
 		$y += $h/2;
 
 		# now draw the label
-		$self->{'surface'}->string($color, $font, $fsize, $x, $y, 0, $labels[$index]);
+		$self->{'surface'}->string($misccolor, $font, $fsize, $x, $y, 0, $labels[$index]);
       }
     }
   }
@@ -2025,7 +2028,7 @@ sub _draw_right_legend {
     $x2 = $x3 + (2 * $self->{'text_space'});
     $y2 += $h/2;
     # order of the datasets in the legend
-	$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
+	$self->{'surface'}->string($misccolor, $font, $fsize, $x2, $y2, 0, $labels[$_]);
   }
 
   # mark off the used space
@@ -2113,7 +2116,7 @@ sub _draw_top_legend {
         # now the label
 		$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
 		$y += $h/2;
-		$self->{'surface'}->string($color, $font, $fsize, $x, $y, 0, $labels[$index]);
+		$self->{'surface'}->string($misccolor, $font, $fsize, $x, $y, 0, $labels[$index]);
       }
     }
   }
@@ -2194,7 +2197,7 @@ sub _draw_left_legend {
     $x2 = $x3 + (2 * $self->{'text_space'});
     $y2 += $h/2;
     # order of the datasets in the legend
-	$self->{'surface'}->string($color, $font, $fsize, $x2, $y2, 0, $labels[$_]);
+	$self->{'surface'}->string($misccolor, $font, $fsize, $x2, $y2, 0, $labels[$_]);
   }
 
   # mark off the used space
@@ -2661,6 +2664,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
   $y1 = $self->{'curr_y_max'};
   $y2 = $self->{'curr_y_max'} - $self->{'tick_len'};
   if ($self->{'skip_x_ticks'} > 1) {
+	 trace("using skip_x_ticks [$self->{skip_x_ticks}]");
     for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
       $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'}));
       $self->{'surface'}->line($misccolor, $line_size, $x2, $y1, $x2, $y2);
@@ -2670,6 +2674,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
     }
   }
   elsif ($self->{'custom_x_ticks'}) {
+	 trace("using custom_x_ticks");
     for (@{$self->{'custom_x_ticks'}}) {
       $x2 = $x1 + ($delta*$_);
       $self->{'surface'}->line( $misccolor,$line_size,$x2, $y1, $x2, $y2);
@@ -2679,6 +2684,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
     }
   }
   else {
+	 trace("using default labels");
     for (0..$self->{'num_datapoints'}-1) {
       $x2 = $x1 + ($delta*$_);
       $self->{'surface'}->line( $misccolor,$line_size,$x2, $y1, $x2, $y2);
