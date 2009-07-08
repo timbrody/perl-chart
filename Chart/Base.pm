@@ -1878,7 +1878,7 @@ sub _draw_bottom_legend {
   $h = $self->{'max_legend_label_height'};
 
   # get the miscellaneous color
-  $misccolor = $self->_color_role_to_rgb('misc');
+  my $misccolor = $self->_color_role_to_rgb('misc');
 
   # figure out how wide the columns need to be, and how many we
   # can fit in the space available
@@ -2504,7 +2504,7 @@ sub _draw_x_ticks {
 		$x1 += $delta/2;
 	}
 
-	if( defined($self->{'skip_x_ticks'}) && $self->{'skip_x_ticks'} == 0 ) {
+	if( !defined($self->{'skip_x_ticks'}) || $self->{'skip_x_ticks'} == 0 ) {
 		$self->{'skip_x_ticks'} = 1;
 	}
 
