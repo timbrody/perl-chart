@@ -104,91 +104,168 @@ sub _find_y_range {
 
 
 sub _draw_data {
-	my $self = shift;
-	my $data = $self->{'dataref'};
+  my $self = shift;
+  my $data = $self->{'dataref'};
+  my $misccolor = $self->_color_role_to_rgb('misc');
+  my ($x1, $x2, $x3, $y1, $y2, $y3, $mod, $abs_x_max, $abs_y_max, $tan_alpha);
+  my ($width, $height, $delta, $delta_num, $map, $t_x_min, $t_x_max, $t_y_min, $t_y_max);
+  my ($i, $j, $color, $brush, $zero_offset);
+  my $brush_size = $self->{'brush_size'};
+  my $pt_size = $self->{'pt_size'};
 
-	my @patterns = @{ $self->{'patterns'} || [] };
+  # init the imagemap data field if they asked for it
+  if ($self->{'imagemap'}) {
+    $self->{'imagemap_data'} = [];
+  }
+  my @xy; # the xy translation of all data points
 
-	my $brush_size = $self->{'brush_size'};
+  # find the delta value between data points, as well
+  # as the mapping constant
+  $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
+  $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+  $delta = $width / ($self->{'num_datapoints'} > 1 ? $self->{'num_datapoints'}-1 : 1);
+  $map = $height / ($self->{'max_val'} - $self->{'min_val'});
 
-	my $repair_top_flag = 0;
-	my $misccolor = $self->_color_role_to_rgb('misc');
+  #for a xy-plot, use this delta and maybe an offset for the zero-axes
+  if ($self->{'xy_plot'}) {
+    $delta_num = $width / ($self->{'x_max_val'} - $self->{'x_min_val'});
 
-# Calculate array of x pixel positions (@x).
-	my $x_step = ($self->{'curr_x_max'} - $self->{'curr_x_min'}) / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-	my $x_min = $self->{'curr_x_min'} + $x_step / 2;
-	my $x_max = $self->{'curr_x_max'} - $x_step / 2;
-	my @x = map { $_ * $x_step + $x_min } 0..$self->{'num_datapoints'}-1;
-	
-	my ($t_x_min, $t_x_max, $t_y_min, $t_y_max, $abs_x_max, $abs_y_max);
+    if ($self->{'x_min_val'} <= 0 && $self->{'x_max_val'} >= 0) {
+       $zero_offset = abs($self->{'x_min_val'}) * abs($delta_num);
+    }
+    elsif ($self->{'x_min_val'} > 0 || $self->{'x_max_val'} < 0) {
+       $zero_offset =  -$self->{'x_min_val'} * $delta_num;
+    }
+    else {
+       $zero_offset = 0;
+    }
+  }
+  
+  # get the base x-y values
+  if ($self->{'xy_plot'}) {
+    $x1 = $self->{'curr_x_min'};
+  }
+  else {
+    $x1 = $self->{'curr_x_min'};
+  }
+  if ($self->{'min_val'} >= 0 ) {
+    $y1 = $self->{'curr_y_max'};
+    $mod = $self->{'min_val'};
+  }
+  elsif ($self->{'max_val'} <= 0) {
+    $y1 = $self->{'curr_y_min'};
+    $mod = $self->{'max_val'};
+  }
+  else {
+    $y1 = $self->{'curr_y_min'} + ($map * $self->{'max_val'});
+    $mod = 0;
+    $self->{'surface'}->line(
+			$misccolor,
+			1,
+			$self->{'curr_x_min'}, $y1,
+			$self->{'curr_x_max'}, $y1);
+  }
 
-# Calculate array of y pixel positions for upper boundary each dataset (@y).
-    my $y_scale = ($self->{'max_val'})
-		? ($self->{'curr_y_max'} - $self->{'curr_y_min'}) / $self->{'max_val'}
-		: ($self->{'curr_y_max'} - $self->{'curr_y_min'}) / 10;
-
-    my $y_max = $self->{'curr_y_max'}; # max pixel point (lower y values)
-    
-	my @y;
-	for my $j (0..$#{$data->[0]}) {
-		my $sum = 0;
-		for my $i (1..$#{$data}) { # bottom to top of chart
-			my $datum = $data->[$i][$j];
-
-			if ( defined $datum && $datum >= 0 ) {
-				$sum += $datum;
-				$y[$i-1][$j] = $y_max - $y_scale * $sum;
-			}
-			else { # missing value, force all to undefined
-				foreach my $k (1..$#{$data}) { $y[$k-1][$j] = undef }
-				last;
-			}
-		}
-	}
-    
-    # Find first and last x where y is defined in the bottom dataset.
-    my $x_begin = 0;
-    my $x_end = $self->{'num_datapoints'}-1;
-    while ( $x_begin <= $x_end && ! defined $y[-1]->[$x_begin] ) { $x_begin++ }
-    while ( $x_begin <= $x_end && ! defined $y[-1]->[$x_end] ) { $x_end-- }
-   
-    if ( $x_begin > $x_end ) { Carp::croak "Internal error: x_begin > x_end ($x_begin > $x_end)"; }
-    
-    # For each dataset, generate a polygon for the dataset's area of the chart,
-    # and fill the polygon with the dataset's color/pattern.
-
+  # Work out where to place a line marker
+  # = brush_size * 3
+  my $marker_delta = $brush_size * 3;
+  
 	$self->{'surface'}->clip(
 		$self->{'curr_x_min'}, $self->{'curr_y_min'},
 		$self->{'curr_x_max'}, $self->{'curr_y_max'},
     );
 
-	for my $dataset (reverse 0..@y-1) {
-		my @points = (
-				[$x[$x_end],$y_max], # right end of x axis
-				[$x[$x_begin],$y_max], # left end of x axis (right-to-left)
-				);
-
-		my $y_ref = $y[$dataset];
-
-		for ($x_begin..$x_end) { 
-			push @points, [$x[$_], $y_ref->[$_]] if defined $y_ref->[$_] 
+	my @y_values;
+	for $j (0..$self->{'num_datapoints'}-1)
+	{
+		for $i (1..$self->{'num_datasets'})
+		{
+			if( !defined $data->[$i][$j] )
+			{
+				$y_values[$_][$j] = undef for (1..$self->{'num_datasets'});
+				last;
+			}
+			$y_values[$i][$j] += $data->[$_][$j] for (1..$i);
 		}
+	}
 
-# draw the polygon
-		my $color = $self->_color_role_to_rgb('dataset'.$dataset);
-		$self->{'surface'}->filled_polygon( $color, $brush_size, \@points );
+	# draw the lines
+	for $i (reverse 1..$self->{'num_datasets'}) {
+		# get the color for this dataset, and set the brush
+		$color = $self->_color_role_to_rgb('dataset'.($i-1));
+
+		my $shape = $self->{'pointStyle' . $i};
+		my $marker_index = 0; # haven't drawn one yet
+
+		push @xy, [];
+
+		my @line;
+		# draw every line for this dataset
+		for $j (0..$self->{'num_datapoints'}-1) {
+			# don't try to draw anything if there's no data
+			if( !defined($y_values[$i][$j]) )
+			{
+				if( scalar(@line) > 1 )
+				{
+					unshift @line, [$line[0]->[0], $y1];
+					push @line, [$line[$#line]->[0], $y1];
+					$self->{'surface'}->filled_polygon($color,$brush_size,\@line);
+				}
+				@line = ();
+				push @{$xy[$i]}, [undef,undef];
+				next;
+			}
+
+			if ($self->{'xy_plot'}) {
+				$x3 = $x1 + $delta_num * $y_values[0][$j] + $zero_offset;
+			}
+			else {
+				$x3 = $x1 + ($delta * $j);
+			}
+			$y3 = $y1 - (($y_values[$i][$j] - $mod) * $map);
+
+			# store every point in the graph for the imagemap
+			if( $y3 >= $self->{'curr_y_min'} && $y3 < $self->{'curr_y_max'} ) {
+				push @{$xy[$i]}, [$x3,$y3];
+			}
+			else {
+				push @{$xy[$i]}, [undef,undef];
+			}
+
+			# now draw the line
+			push @line, [$x3,$y3];
+
+			# draw the marker
+			if( defined($shape) && $x3 > $marker_index ) {
+				$self->{'surface'}->point($color,$pt_size,$x3,$y3,$shape);
+				$marker_index = $x3 + $marker_delta;
+			}
+		}
+		if( @line > 1 )
+		{
+			unshift @line, [$line[0]->[0], $y1];
+			push @line, [$line[$#line]->[0], $y1];
+			$self->{'surface'}->filled_polygon($color,$brush_size,\@line);
+		}
+		@line = ();
+	}
+
+	if( $self->{'imagemap'} ) {
+		$self->{'imagemap_data'} = \@xy;
 	}
 
 	$self->{'surface'}->reset_clip();
 
-    # Enclose the plots
-	$self->{'surface'}->rectangle(
-		$misccolor,
-		1,
-		$self->{'curr_x_min'}, $self->{'curr_y_min'},
-		$self->{'curr_x_max'}, $self->{'curr_y_max'},
-    );
-}    
+	# and finally box it off
+	if( !defined($self->{'draw_box'}) or $self->{'draw_box'} ne 'none' )
+	{
+		$self->{'surface'}->rectangle(
+				$misccolor,
+				1,
+				$self->{'curr_x_min'}, $self->{'curr_y_min'},
+				$self->{'curr_x_max'}, $self->{'curr_y_max'});
+	}
+}
 
 ###############################################################
 
