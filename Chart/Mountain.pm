@@ -180,7 +180,8 @@ sub _draw_data {
 	{
 		for $i (1..$self->{'num_datasets'})
 		{
-			if( !defined $data->[$i][$j] )
+			# if any column is undefined or less than 0 we can't plot it
+			if( !defined $data->[$i][$j] or $data->[$i][$j] < 0 )
 			{
 				$y_values[$_][$j] = undef for (1..$self->{'num_datasets'});
 				last;
@@ -217,7 +218,7 @@ sub _draw_data {
 			}
 
 			if ($self->{'xy_plot'}) {
-				$x3 = $x1 + $delta_num * $y_values[0][$j] + $zero_offset;
+				$x3 = $x1 + $delta_num * $data->[0][$j] + $zero_offset;
 			}
 			else {
 				$x3 = $x1 + ($delta * $j);
