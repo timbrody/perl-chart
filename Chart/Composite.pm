@@ -407,12 +407,10 @@ sub _draw_data {
   # do a grey background if they want it
   if ($self->{'grey_background'}) {
     $self->_grey_background;
-    $self->{'sub_0'}->{'grey_background'} = FALSE;
-    $self->{'sub_1'}->{'grey_background'} = FALSE;
-  }
+    $self->{'sub_0'}->{'grey_background'} = 0;
+    $self->{'sub_1'}->{'grey_background'} = 0;
 
-  # draw grid again if necessary (if grey background ruined it..)
-  unless ($self->{grey_background}) {
+	# draw grid again if necessary (if grey background ruined it..)
     $self->_draw_grid_lines if $self->{grid_lines};
     $self->_draw_x_grid_lines if $self->{x_grid_lines};
     $self->_draw_y_grid_lines if $self->{y_grid_lines};
