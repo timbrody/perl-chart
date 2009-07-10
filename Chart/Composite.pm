@@ -154,10 +154,6 @@ sub _split_data {
   $self->{'sub_0'} = ("Chart::".$types[0])->new();
   $self->{'sub_1'} = ("Chart::".$types[1])->new();
 
-  # copy the color tables FIXME Moved from sub_update, not sure why this is necessary?
-  # $sub0->{'color_table'} = { %{$self->{'color_table'}} };
-  # $sub1->{'color_table'} = { %{$self->{'color_table'}} };
-
   # set the options (set the min_val, max_val, and y_ticks
   # options intelligently so that the sub-objects don't get
   # confused)
@@ -174,6 +170,10 @@ sub _split_data {
 		  $self->{'sub_1'}->set( $opt => $self->{opts}->{"${opt}2"} );
 	  }
   }
+
+  # clone the colors data
+  $self->{'sub_0'}->{'colors'} = {%{$self->{'sub_0'}->{'colors'}}};
+  $self->{'sub_1'}->{'colors'} = {%{$self->{'sub_1'}->{'colors'}}};
 
   # replace the surfaces
   $self->{'sub_0'}->{'surface'} = $self->{'surface'};
@@ -196,11 +196,9 @@ sub _split_data {
 			  Carp::croak "composite_info refers to non-existent dataset $j (".(@{$self->{'dataref'}}-1)." datasets defined)";
 		  }
 # dataset colors
-		  $sub->{'color_table'}{'dataset'.$k} = $self->{'color_table'}{'dataset'.($j-1)};
+		  $sub->{'colors'}{'dataset'.$k} = $self->_color_role_to_rgb( 'dataset'.($j-1) );
 # neg_dataset colors
-		  if( $self->{'colors'}{'neg_dataset'.($j-1)} ) {
-			  $sub->{'color_table'}{'neg_dataset'.$k} = $self->{'color_table'}{'neg_dataset'.($j-1)};
-		  }
+		  $sub->{'colors'}{'neg_dataset'.$k} = $self->_color_role_to_rgb( 'neg_dataset'.($j-1) );
 # series_label
 		  $sub->{'series_label'}[$k] = $self->{'series_label'}[$j-1];
 # point style
@@ -279,14 +277,6 @@ sub _draw_legend {
   $self->_sub_update(); 
   # init the legend example height
   $self->_legend_example_height_init;
-
-  # modify the dataset color table entries to avoid duplicating
-  # dataset colors.
-#  my ($n0, $n1) = map { scalar @{ $self->{'composite_info'}[$_][1] } } 0..1;
-#  for (0..$n1-1) {
-#    $self->{'sub_1'}{'color_table'}{'dataset'.$_} 
-#      = $self->{'color_table'}{'dataset'.($_+$n0)};
-#  }
 
   my $x1 = $self->{'curr_x_min'} + $self->{'graph_border'}
 			+ $self->{'sub_0'}->{'y_tick_label_width'}

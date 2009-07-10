@@ -54,10 +54,22 @@ sub _draw_data {
   }
   my @xy; # the xy translation of all data points
 
+  # get the base x-y values
+  $x1 = $self->{'curr_x_min'};
+
   # find the delta value between data points, as well
   # as the mapping constant
   $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
   $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+
+	# x-axis is discrete
+	if( $self->{'component'} )
+	{
+		my $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
+		$width -= $delta;
+		$x1 += $delta/2;
+	}
+
   $delta = $width / ($self->{'num_datapoints'} > 1 ? $self->{'num_datapoints'}-1 : 1);
   $map = $height / ($self->{'max_val'} - $self->{'min_val'});
 
@@ -76,13 +88,6 @@ sub _draw_data {
     }
   }
   
-  # get the base x-y values
-  if ($self->{'xy_plot'}) {
-    $x1 = $self->{'curr_x_min'};
-  }
-  else {
-    $x1 = $self->{'curr_x_min'};
-  }
   if ($self->{'min_val'} >= 0 ) {
     $y1 = $self->{'curr_y_max'};
     $mod = $self->{'min_val'};
