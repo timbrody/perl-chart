@@ -165,7 +165,7 @@ sub _split_data {
   $self->{'sub_1'}->set (%{$self->{'opts'}});
 	# these settings are specified as e.g. min_val1, which means min_val for
 	# sub-graph 1
-  foreach my $opt (qw( min_val max_val y_ticks f_y_tick y_axis_scale ))
+  foreach my $opt (qw( min_val max_val y_axis y_ticks f_y_tick y_axis_scale ))
   {
 	  if( defined $self->{opts}->{"${opt}1"} ) {
 		  $self->{'sub_0'}->set( $opt => $self->{opts}->{"${opt}1"} );
