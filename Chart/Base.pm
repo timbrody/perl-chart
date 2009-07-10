@@ -2418,33 +2418,22 @@ trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)
 
 ## draw the x-ticks and their labels
 sub _draw_x_ticks {
-  my $self = shift;
-  my $data = $self->{'dataref'};
-  my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
-  my $line_size = $self->{'line_size'};
-  my $textcolor = $self->_color_role_to_rgb('x_axis');
-  $textcolor ||= $self->_color_role_to_rgb('text');
-  my $misccolor = $self->_color_role_to_rgb('x_axis');
-  $misccolor ||= $self->_color_role_to_rgb('misc');
-  my $label;
-  my ($h);
-  my ($x1, $x2, $y1, $y2);
-  my ($width, $delta);
-  my ($stag);
+	my $self = shift;
 
-  if( exists($self->{'x_axis'}) and $self->{'x_axis'} eq 'none' )
-  {
-    return;
-  }
+	my $data = $self->{'dataref'};
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
 
-  $self->{'grid_data'}->{'x'} = [];
+	if( exists($self->{'x_axis'}) and $self->{'x_axis'} eq 'none' )
+	{
+		return;
+	}
 
-  # get the height and width of the font
-  #($h, $w) = ($font->height, $font->width);
-  $h = $self->{'x_tick_label_height'};
-  
+	$self->{'grid_data'}->{'x'} = [];
+
   # allow for the amount of space the y-ticks will push the
   # axes over to the right
+
+	my( $x1, $y1, $width );
 
   #The one and only way to get the RIGHT x value and the width
   if ($self->{'y_axes'} =~ /^right$/i) {
@@ -2468,16 +2457,39 @@ sub _draw_x_ticks {
 			$self->{'curr_x_max'} -= $need - $self->{'graph_border'};
 		}
 
-    $x1 = $self->{'curr_x_min'} + $self->{'y_tick_label_width'}
-         + 2 * $self->{'text_space'} + $self->{'tick_len'};
-    $width = $self->{'curr_x_max'} - $x1;
+		$x1 = $self->{'curr_x_min'} + $self->{'y_tick_label_width'}
+			+ 2 * $self->{'text_space'} + $self->{'tick_len'};
+		$width = $self->{'curr_x_max'} - $x1;
   }
 
-  #the same for the y value, but not so tricky
-  $y1 = $self->{'curr_y_max'} - $self->{'text_space'};
+	# the same for the y value, but not so tricky
+	$y1 = $self->{'curr_y_max'} - $self->{'text_space'};
 
-  # get the delta value
-  $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'}-1 : 1);
+	$self->_draw_x_ticks_actual( $x1, $y1, $width );
+}
+
+sub _draw_x_ticks_actual
+{
+	my( $self, $x1, $y1, $width ) = @_;
+
+	my $data = $self->{'dataref'};
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+
+	my $line_size = $self->{'line_size'};
+	my $textcolor = $self->_color_role_to_rgb('x_axis');
+	$textcolor ||= $self->_color_role_to_rgb('text');
+	my $misccolor = $self->_color_role_to_rgb('x_axis');
+	$misccolor ||= $self->_color_role_to_rgb('misc');
+
+	my( $x2, $y2 );
+
+	my $label;
+
+	# get the height of the x-labels (required for vertical/staggered)
+	my $h = $self->{'x_tick_label_height'};
+  
+	# get the delta value
+	my $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'}-1 : 1);
 
 	# Continuous
 	if( $self->isa('Chart::Lines') )
@@ -2486,8 +2498,8 @@ sub _draw_x_ticks {
 	# Discrete
 	else
 	{
-  	# compress the x-axis so labels are centered on data points
-  	$delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
+		# compress the x-axis so labels are centered on data points
+		$delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
 		$width -= $delta;
 		$x1 += $delta/2;
 	}
@@ -2548,7 +2560,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
 
   elsif ($self->{'x_ticks'} =~ /^staggered$/i) { # staggered ticks
     if ($self->{'skip_x_ticks'}>1) {
-      $stag = 0;
+      my $stag = 0;
       for (0..int(($self->{'num_datapoints'}-1)/$self->{'skip_x_ticks'})) {
         if ( defined($data->[0][$_*$self->{'skip_x_ticks'}]) ) {
            $x2 = $x1 + ($delta * ($_ * $self->{'skip_x_ticks'})) 
@@ -2566,7 +2578,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
       }
     }
     elsif ($self->{'custom_x_ticks'}) {
-      $stag = 0;
+      my $stag = 0;
       for (sort (@{$self->{'custom_x_ticks'}})) { # sort to make it look good
         if ( defined($data->[0][$_]) ) {
            $x2 = $x1 + ($delta*$_) - $self->string_width($font,$fsize,$self->{f_x_tick}->($data->[0][$_])) / 2;
