@@ -172,8 +172,8 @@ sub _split_data {
   }
 
   # clone the colors data
-  $self->{'sub_0'}->{'colors'} = {%{$self->{'sub_0'}->{'colors'}}};
-  $self->{'sub_1'}->{'colors'} = {%{$self->{'sub_1'}->{'colors'}}};
+  $self->{'sub_0'}->{'colors'} = {%{$self->{'sub_0'}->{'colors'}||{}}};
+  $self->{'sub_1'}->{'colors'} = {%{$self->{'sub_1'}->{'colors'}||{}}};
 
   # replace the surfaces
   $self->{'sub_0'}->{'surface'} = $self->{'surface'};
