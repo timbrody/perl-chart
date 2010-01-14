@@ -1732,6 +1732,7 @@ sub string_bounds
 {
 	my( $self, $font, $size, $string ) = @_;
 
+	Carp::confess( "surface undefined" ) if !defined $self->{'surface'};
 	return $self->{'surface'}->string_bounds( $font, $size, $string );
 }
 
