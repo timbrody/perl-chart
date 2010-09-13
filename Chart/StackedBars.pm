@@ -12,9 +12,9 @@
 
 package Chart::StackedBars;
 
-use Chart::Base 3.0;
+use Chart::Bars 3.0;
 
-@ISA = qw(Chart::Base);
+@ISA = qw(Chart::Bars);
 $VERSION = $Chart::Base::VERSION;
 
 use strict;
@@ -171,6 +171,9 @@ sub _draw_data {
   $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
   $map = $height / ($self->{'max_val'} - $self->{'min_val'});
 
+  my $bar_border_size = $self->{'bar_border_size'};
+  $bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
+  
   # get the base x and y values
   $x1 = $self->{'curr_x_min'};
   if ($self->{'min_val'} >= 0) {
@@ -189,7 +192,6 @@ sub _draw_data {
 			     $misccolor);
   }
 
-  
   # create another copy of the data, but stacked
   $data->[1] = [@{$raw->[1]}];
   for $i (0..$self->{'num_datapoints'}-1) {
@@ -251,11 +253,11 @@ sub _draw_data {
 
       # now outline it. outline red if the bar had been cut off
       unless ($cut){
-		  $self->{'surface'}->rectangle($misccolor, $line_size, $x2, $y2, $x3, $y3);
+		  $self->{'surface'}->rectangle($misccolor, $bar_border_size, $x2, $y2, $x3, $y3);
       }
       else {
-          $self->{'surface'}->rectangle($misccolor, $line_size, $x2, $y2, $x3, $y3);
-          $self->{'surface'}->rectangle($pink, $line_size, $x2, $y1, $x3, $y3);
+          $self->{'surface'}->rectangle($misccolor, $bar_border_size, $x2, $y2, $x3, $y3);
+          $self->{'surface'}->rectangle($pink, $bar_border_size, $x2, $y1, $x3, $y3);
       }
 
       # now bootstrap the y values

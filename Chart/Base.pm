@@ -1870,6 +1870,9 @@ sub _draw_legend_box {
 	my( $self, $x, $y, $x2, $y2 ) = @_;
 
 	my $line_size = $self->{'line_size'};
+	my $legend_border_size = $self->{'legend_border_size'};
+	$legend_border_size = $line_size if !defined $legend_border_size;
+
 	# get the miscellaneous color
 	my $misccolor = $self->_color_role_to_rgb('misc');
 
@@ -1883,7 +1886,7 @@ sub _draw_legend_box {
 
 	$self->{'surface'}->rectangle(
 			$misccolor,
-			$line_size,
+			$legend_border_size,
 			$x, $y, $x2, $y2);
 }
 

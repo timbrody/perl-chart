@@ -63,6 +63,9 @@ Vertical bar chart.
 sub _draw_legend_entry_example {
 	my( $self, $color, $x, $y, $h, $shape ) = @_;
 
+	my $bar_border_size = $self->{'bar_border_size'};
+	$bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
+
 	my $legend_example_size = $self->{'legend_example_size'};
 	my $misccolor = $self->_color_role_to_rgb('misc');
 
@@ -77,7 +80,7 @@ sub _draw_legend_entry_example {
 			$x2, $y2);
 
 	$self->{'surface'}->rectangle($misccolor,
-			$self->{'line_size'},
+			$bar_border_size,
 			$x, $y, 
 			$x2, $y2);
 }

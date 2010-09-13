@@ -19,14 +19,13 @@
 
 package Chart::HorizontalBars;
 
-use Chart::Base 2.3;
-use GD;
+use Chart::Bars 3.0;
 use Carp;
+
+@ISA = qw(Chart::Bars);
+$VERSION = $Chart::Base::VERSION;
+
 use strict;
-
-@Chart::HorizontalBars::ISA = qw(Chart::Base);
-$Chart::HorizontalBars::VERSION = '2.3';
-
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<#
@@ -36,21 +35,23 @@ $Chart::HorizontalBars::VERSION = '2.3';
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  private methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
-#draw x_ticks and their labels
+
 sub _draw_x_ticks {
  my $self = shift;
  my $data = $self->{'dataref'};
- my $font = 'tick_label_font';
- my $textcolor = $self->_color_role_to_index('text');
- my $misccolor = $self->_color_role_to_index('misc');
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+ my $textcolor = $self->_color_role_to_rgb('text');
+ my $misccolor = $self->_color_role_to_rgb('misc');
  my ($h, $w, $x1, $y1, ,$y2, $x2, $delta, $width, $label);
  my @labels = @{$self->{'y_tick_labels'}};
+print STDERR "labels=@labels\n";
+  my $line_size = $self->{'line_size'};
 
  $self->{'grid_data'}->{'x'} = [];
  
  #get height and width of the font
  #($h, $w) = ($font->height, $font->width);
- $h = $self->{'x_tick_label_width'};
+ $h = $self->{'x_tick_label_height'};
  
  #get the right x-value and width
  if ( $self->{'y_axes'} =~ /^right$/i ){
@@ -80,11 +81,12 @@ sub _draw_x_ticks {
    #get the point for updating later
    $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} -$h - $self->{'tick_len'};
    #get the start point
-   $y2 = $y1  + $self->{'tick_len'} + $self->{'text_space'};
+   $y2 = $y1  + $self->{'tick_len'} + $self->{'text_space'} + $h;
    for (0..$#labels){
 		$label = $self->{'y_tick_labels'}[$_];
-		$x2 = $x1 + ($delta * $_) - $self->_gd_string_width($font,$label)/2 ;
-		$self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+		$x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2 ;
+print STDERR "$x2,$y2,'$label'\n";
+		$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
    }
  }
  elsif ($self->{'x_ticks'} =~ /^staggered/i ) {  #staggered ticks
@@ -93,14 +95,14 @@ sub _draw_x_ticks {
 
    for (0..$#labels) {
    $label = $self->{'y_tick_labels'}[$_];
-     $x2 = $x1 + ($delta * $_) - $self->_gd_string_width($font,$label)/2;
+     $x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2;
      unless ($_%2) {
 		$y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'};
      }
      else {
 		$y2 = $y1  + $h + 2*$self->{'text_space'} + $self->{'tick_len'};
      }
-	$self->_gd_string($textcolor, $font, 0, $x2, $y2, $label);
+	$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
    }
 
  }
@@ -113,10 +115,10 @@ sub _draw_x_ticks {
    for (0..$#labels){
      $label = $self->{'y_tick_labels'}[$_];
      #get the start point
-     $y2 = $y1  + $self->{'tick_len'} + $self->_gd_string_width($font,$label) + $self->{'text_space'};
+     $y2 = $y1  + $self->{'tick_len'} + $self->string_width($font,$fsize,$label) + $self->{'text_space'};
 
      $x2 = $x1 + ($delta * $_) - ($h /2);
-     $self->_gd_string($textcolor, $font, Chart::Base::ANGLE_VERTICAL, $x2, $y2, $label);
+     $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, Chart::Base::ANGLE_VERTICAL, $label);
    }
 
  }
@@ -133,7 +135,7 @@ sub _draw_x_ticks {
  $y2 =$self->{'curr_y_max'} + $self->{'tick_len'};
  for(0..$#labels ) {
    $x2 = $x1 + ($delta * $_);
-   $self->{'gd_obj'}->line($x2, $y1, $x2, $y2, $misccolor);
+   $self->{'surface'}->line($misccolor, $line_size, $x2, $y1, $x2, $y2);
      if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
         $self->{'grid_data'}->{'x'}->[$_] = $x2;
      }
@@ -142,17 +144,16 @@ sub _draw_x_ticks {
  return 1;
 }
 
-
-
 sub _draw_y_ticks {
   my $self = shift;
   my $side = shift || 'left';
   my $data = $self->{'dataref'};
-  my $font = 'tick_label_font';
-  my $textcolor = $self->_color_role_to_index ('text');
-  my $misccolor = $self->_color_role_to_index ('misc');
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+  my $textcolor = $self->_color_role_to_rgb ('text');
+  my $misccolor = $self->_color_role_to_rgb ('misc');
   my ($h, $x1, $x2,  $y1, $y2);
   my ($width, $height, $delta);
+  my $line_size = $self->{'line_size'};
 
   $self->{'grid_data'}->{'y'} =[];
   
@@ -178,9 +179,9 @@ sub _draw_y_ticks {
     
     #draw the labels
     for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'});
+       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
        $x2 = $x1 + $self->{'tick_len'} + $self->{'text_space'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2,
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
                               $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
     }
     
@@ -190,7 +191,7 @@ sub _draw_y_ticks {
     $y1 += $h/2;
     for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
            $y2 = $y1 - ($delta * $_);
-           $self->{'gd_obj'}->line($x1,$y2,$x2,$y2,$misccolor);
+           $self->{'surface'}->line($misccolor, $line_size, $x1,$y2,$x2,$y2);
            if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
               $self->{'grid_data'}->{'y'}->[$_] = $y2;
            }
@@ -214,9 +215,9 @@ sub _draw_y_ticks {
 
     #first draw the right labels
     for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'});
+       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
        $x2 = $x1 + $self->{'tick_len'} + $self->{'text_space'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2,
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
                               $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
     }
 
@@ -226,7 +227,7 @@ sub _draw_y_ticks {
     $y1 += $h/2;
     for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
            $y2 = $y1 - ($delta * $_);
-           $self->{'gd_obj'}->line($x1,$y2,$x2,$y2,$misccolor);
+           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
            if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
               $self->{'grid_data'}->{'y'}->[$_] = $y2;
            }
@@ -243,10 +244,10 @@ sub _draw_y_ticks {
 
     #then draw the left labels
     for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'});
-       $x2 = $x1 - $self->_gd_string_width($font,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
+       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
+       $x2 = $x1 - $self->string_width($font,$fsize,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
              + $self->{'x_tick_label_width'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2,
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
                               $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
     }
 
@@ -260,7 +261,7 @@ sub _draw_y_ticks {
     $y1 += $h/2;
     for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
            $y2 = $y1 - ($delta * $_);
-           $self->{'gd_obj'}->line($x1,$y2,$x2,$y2,$misccolor);
+           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
            if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
               $self->{'grid_data'}->{'y'}->[$_] = $y2;
            }
@@ -283,10 +284,10 @@ sub _draw_y_ticks {
 
     #draw the labels
     for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'});
-       $x2 = $x1 - $self->_gd_string_width($font,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
+       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
+       $x2 = $x1 - $self->string_width($font,$fsize,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
              + $self->{'x_tick_label_width'};
-       $self->_gd_string($textcolor, $font, 0, $x2, $y2,
+       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
                               $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
     }
     
@@ -300,7 +301,7 @@ sub _draw_y_ticks {
     $y1 += $h/2;
     for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
            $y2 = $y1 - ($delta * $_);
-           $self->{'gd_obj'}->line($x1,$y2,$x2,$y2,$misccolor);
+           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
            if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
               $self->{'grid_data'}->{'y'}->[$_] = $y2;
            }
@@ -310,205 +311,26 @@ sub _draw_y_ticks {
   return 1;
 }
 
-#overwrite the find_y_scale function, only to get the right f_x_ticks !!!!!
-sub _find_y_scale
-{
-	my $self = shift;
-
-	# Predeclare vars.
-	my ($d_min, $d_max);		# Dataset min & max.
-	my ($p_min, $p_max);		# Plot min & max.
-	my ($tickInterval, $tickCount);
-	my $font = 'tick_label_font';
-	my @tickLabels;				# List of labels for each tick.
-	my $maxtickLabelLen = 0;	# The length of the longest tick label.
-	my $maxtickLabelWidth = 0;
-	my $maxtickLabelHeight = 0;
-
-	# Find the datatset minimum and maximum.
-	($d_min, $d_max) = $self->_find_y_range();
-
-	# Force the inclusion of zero if the user has requested it.
-	if( $self->{'include_zero'})
-	{
-		if( ($d_min * $d_max) > 0 )	# If both are non zero and of the same sign.
-		{
-			if( $d_min > 0 )	# If the whole scale is positive.
-			{
-				$d_min = 0;
-			}
-			else				# The scale is entirely negative.
-			{
-				$d_max = 0;
-			}
-		}
-	}
-
-        if ( $self->{'integer_ticks_only'} =~ /^\d$/ ) {
-           if ( $self->{'integer_ticks_only'} == 1 ) {
-              $self->{'integer_ticks_only'} = 1;
-           } else {
-              $self->{'integer_ticks_only'} = 0;
-           }
-        }
-	if( $self->{'integer_ticks_only'} )
-	{
-                # Allow the dataset range to be overidden by the user.
-	        # f_min/max are booleans which indicate that the min & max should not be modified.
-	        my $f_min = defined $self->{'min_val'};
-	        $d_min = $self->{'min_val'} if $f_min;
-
-	        my $f_max = defined $self->{'max_val'};
-	        $d_max = $self->{'max_val'} if $f_max;
-
-	        # Assert against the min is larger than the max.
-	        if( $d_min > $d_max )
-	        {
-	         croak "The the specified 'min_val' & 'max_val' values are reversed (min > max: $d_min>$d_max)";
-	        }
-		# The user asked for integer ticks, force the limits to integers.
-		# & work out the range directly.
-		$p_min = $self->_round2Tick($d_min, 1, -1);
-		$p_max = $self->_round2Tick($d_max, 1, 1);
-
-		my $skip = $self->{skip_int_ticks};
-
-		$tickInterval = $skip;
-		$tickCount = ($p_max - $p_min ) /$skip +1;
-
-             	# Now sort out an array of tick labels.
-
-		for( my $labelNum = $p_min; $labelNum<=$p_max; $labelNum+=$tickInterval )
-		{
-			my $labelText;
-
-			if( defined $self->{f_x_tick} )
-			{
-                        	# Is _default_f_tick function used?
-                        	if ( $self->{f_x_tick} == \&_default_f_tick) {
-			   	$labelText = sprintf("%d", $labelNum);
-                        	}
-				else {
-					$labelText = $self->{f_x_tick}->($labelNum);
-                        	}
-			}
-
-			else
-			{
-				$labelText = sprintf("%d", $labelNum);
-			}
-
-		#print "labelText = $labelText\n";
-		push @tickLabels, $labelText;
-		my ($w,$h) = $self->_gd_string_dimensions($font,$labelText);
-		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
-		$maxtickLabelWidth = $w if $w > $maxtickLabelWidth;
-		$maxtickLabelHeight = $h if $h > $maxtickLabelHeight;
-		}
-
-	}
-	else
-	{
-	    # Allow the dataset range to be overidden by the user.
-	    # f_min/max are booleans which indicate that the min & max should not be modified.
-	    my $f_min = defined $self->{'min_val'};
-	    $d_min = $self->{'min_val'} if $f_min;
-
-	    my $f_max = defined $self->{'max_val'};
-	    $d_max = $self->{'max_val'} if $f_max;
-
-	    # Assert against the min is larger than the max.
-	    if( $d_min > $d_max )
-	    {
-	     croak "The the specified 'min_val' & 'max_val' values are reversed (min > max: $d_min>$d_max)";
-	     }
-
-	     # Calculate the width of the dataset. (posibly modified by the user)
-	     my $d_width = $d_max - $d_min;
-
-	     # If the width of the range is zero, forcibly widen it
-	     # (to avoid division by zero errors elsewhere in the code).
-	     if( 0 == $d_width )
-	         {
-		$d_min--;
-		$d_max++;
-		$d_width = 2;
-	          }
-
-             # Descale the range by converting the dataset width into
-             # a floating point exponent & mantisa pair.
-             my( $rangeExponent, $rangeMantisa ) = $self->_sepFP( $d_width );
-	     my $rangeMuliplier = 10 ** $rangeExponent;
-
-	     # Find what tick
-	     # to use & how many ticks to plot,
-	     # round the plot min & max to suatable round numbers.
-	     ($tickInterval, $tickCount, $p_min, $p_max)
-		= $self->_calcTickInterval($d_min/$rangeMuliplier, $d_max/$rangeMuliplier,
-				$f_min, $f_max,
-				$self->{'min_y_ticks'}, $self->{'max_y_ticks'});
-	     # Restore the tickInterval etc to the correct scale
-	     $_ *= $rangeMuliplier foreach($tickInterval, $p_min, $p_max);
-
-	     #get teh precision for the labels
-	     my $precision = $self->{'precision'};
-
-	     # Now sort out an array of tick labels.
-	     for( my $labelNum = $p_min; $labelNum<=$p_max; $labelNum+=$tickInterval )
-	     {
-		my $labelText;
-
-		if( defined $self->{f_x_tick} )
-		{
-                        # Is _default_f_tick function used?
-                        if ( $self->{f_x_tick} == \&_default_f_tick) {
-			   $labelText = sprintf("%.".$precision."f", $labelNum);
-                        } else {
-			   $labelText = $self->{f_x_tick}->($labelNum);
-                        }
-		}
-		else
-		{
-			$labelText = sprintf("%.".$precision."f", $labelNum);
-		}
-		#print "labelText = $labelText\n";
-		push @tickLabels, $labelText;
-		my ($w,$h) = $self->_gd_string_dimensions($font,$labelText);
-		$maxtickLabelLen = length $labelText if $maxtickLabelLen < length $labelText;
-		$maxtickLabelWidth = $w if $w > $maxtickLabelWidth;
-		$maxtickLabelHeight = $h if $h > $maxtickLabelHeight;
-	     }
-	}
-
-	# Store the calculated data.
-	$self->{'min_val'} = $p_min;
-	$self->{'max_val'} = $p_max;
-	$self->{'y_ticks'} = $tickCount;
-	$self->{'y_tick_labels'} = \@tickLabels;
-	$self->{'y_tick_label_length'} = $maxtickLabelLen;
-	$self->{'y_tick_label_width'} = $maxtickLabelWidth;
-	$self->{'y_tick_label_height'} = $maxtickLabelHeight;
-
-	# and return.
-	return 1;
-}
-
-
 ## finally get around to plotting the data
 sub _draw_data {
   my $self = shift;
   my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
+  my $misccolor = $self->_color_role_to_rgb('misc');
   my ($x1, $x2, $x3, $y1, $y2, $y3);
   my $cut = 0;
-  my ($width, $height, $delta1, $delta2, $map, $mod, $pink);
+  my ($width, $height, $delta1, $delta2, $map, $mod);
+  my $pink = [255,0,255];
   my ($i, $j, $color);
+  my $line_size = $self->{'line_size'};
 
   # init the imagemap data field if they wanted it
   if ($self->{'imagemap'}) {
     $self->{'imagemap_data'} = [];
   }
 
+  my $bar_border_size = $self->{'bar_border_size'};
+  $bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
+  
   # find both delta values ($delta1 for stepping between different
   # datapoint names, $delta2 for setpping between datasets for that
   # point) and the mapping constant
@@ -536,15 +358,14 @@ sub _draw_data {
   else {
    $x1 = $self->{'curr_x_min'} + abs($map * $self->{'min_val'});
    $mod = 0;
-   $self->{'gd_obj'}->line ($x1, $self->{'curr_y_min'},
-                            $x1, $self->{'curr_y_max'},
-                           $misccolor);
+   $self->{'surface'}->line ($misccolor, $line_size,$x1, $self->{'curr_y_min'},
+                            $x1, $self->{'curr_y_max'});
   }
   
   # draw the bars
   for $i (1..$self->{'num_datasets'}) {
     # get the color for this dataset
-    $color = $self->_color_role_to_index('dataset'.($i-1));
+    $color = $self->_color_role_to_rgb('dataset'.($i-1));
     
     # draw every bar for this dataset
     for $j (0..$self->{'num_datapoints'}) {
@@ -575,33 +396,17 @@ sub _draw_data {
         }
         
 	# draw the bar
-	## y2 and y3 are reversed in some cases because GD's fill
-	## algorithm is lame
-	if ($data->[$i][$j] < 0) {
-          $self->{'gd_obj'}->filledRectangle ($x3, $y2, $x2, $y3, $color);
-          if ($self->{'imagemap'}) {
-	       $self->{'imagemap_data'}->[$i][$j] = [$x3, $y2, $x2, $y3];
-          }
-
-          $self->{'gd_obj'}->filledRectangle ($x3, $y2, $x2, $y3, $color);
-          if ($self->{'imagemap'}) {
-              $self->{'imagemap_data'}->[$i][$j] = [$x3, $y2, $x2, $y3];
-          }
-	}
-	else {
-	  $self->{'gd_obj'}->filledRectangle ($x2, $y2, $x3, $y3, $color);
+	  $self->{'surface'}->filled_rectangle ($color, $line_size, $x2, $y2, $x3, $y3);
 	  if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y2, $x3, $y3];
 	  }
-	}
 
 	# now outline it. outline red if the bar had been cut off
         unless ($cut){
-	  $self->{'gd_obj'}->rectangle ($x2, $y3, $x3, $y2, $misccolor);
+	  $self->{'surface'}->rectangle ($misccolor, $bar_border_size, $x2, $y3, $x3, $y2);
         }
         else {
-          $pink = $self->{'gd_obj'}->colorAllocate(255,0,255);
-          $self->{'gd_obj'}->rectangle ($x2, $y3, $x3, $y2, $pink);
+          $self->{'surface'}->rectangle ($pink, $bar_border_size, $x2, $y3, $x3, $y2);
         }
         
       } else {
@@ -613,11 +418,14 @@ sub _draw_data {
   }
       
   # and finaly box it off 
-  $self->{'gd_obj'}->rectangle ($self->{'curr_x_min'},
+  $self->{'surface'}->rectangle (
+  				$misccolor,
+				$line_size,
+  				$self->{'curr_x_min'},
   				$self->{'curr_y_min'},
 				$self->{'curr_x_max'},
-				$self->{'curr_y_max'},
-				$misccolor);
+				$self->{'curr_y_max'}
+		);
   return;
 
 }
