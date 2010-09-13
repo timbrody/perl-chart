@@ -206,6 +206,10 @@ sub _draw_data {
 	my $value = &{$self->{'f_y_tick'}}($data->[$i][$j] - $zero_offset->[$i-1]);
 	my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$value);
 	if( $y3 <= $y2 ) {
+		if( $self->{'f_bar_color'} )
+		{
+			$color = &{$self->{'f_bar_color'}}($data->[$i][$j], $color);
+		}
 	  $self->{'surface'}->filled_rectangle($color, 0, $x2, $y3, $x3, $y2);
 	  if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y3, $x3, $y2];
@@ -219,6 +223,10 @@ sub _draw_data {
 	  }
 	}
 	else {
+		if( $self->{'f_bar_color'} )
+		{
+			$neg_color = &{$self->{'f_bar_color'}}($data->[$i][$j], $neg_color);
+		}
 	  $self->{'surface'}->filled_rectangle($neg_color, 0, $x2, $y2, $x3, $y3);
 	  if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y2, $x3, $y3];
