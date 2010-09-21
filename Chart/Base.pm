@@ -503,7 +503,7 @@ sub scalar_svg
 
 	$self->_copy_data( $dataref );
 
-	$self->_check_data( $dataref );
+	$self->_check_data();
 
 	$self->_draw();
 
@@ -518,7 +518,7 @@ sub svg
 
 	binmode($fh);
 
-	print $fh $self->scalar_svg();
+	print $fh $self->scalar_svg( $dataref );
 
 	close($fh);
 }
@@ -863,7 +863,7 @@ sub _check_data {
 					undef;
 		  }
 	  }
-	  $self->{f_y_tick} = sub { sprintf("%.2f", 10 ** $_[0] ) };
+	  $self->{f_y_tick} = sub { sprintf("10^%d", $_[0] ) };
   }
 
   # find good min and max y-values for the plot
