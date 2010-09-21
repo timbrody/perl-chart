@@ -188,6 +188,8 @@ sub _draw_data {
 	    }
 		$y2 = $y1;
 		$x3 = $x2 + $delta2;
+		# make sure bars are at least 1 pixel wide
+		$x3 = $x2 + 1 if int($x3) eq int($x2);
 		$y3 = $y1 - (($data->[$i][$j] - $mod - $zero_offset->[$i-1]) * $map);
 	
         #cut the bars off, if needed
