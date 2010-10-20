@@ -1,9 +1,10 @@
 package Chart::Render::Cairo;
 
-use Chart::Render;
+use Chart::Render qw( :ops );
 @ISA = qw( Chart::Render );
 
 use Cairo;
+use Pango;
 use Math::Trig;
 
 my @CAIRO_FORMATS = ();
@@ -507,16 +508,22 @@ sub string($$$$$$$$)
 		$font = [ $font, GC_FONT_SLANT_NORMAL, GC_FONT_WEIGHT_NORMAL ];
 	}
 
-	my $ops = [];
-	push @$ops,
-		$self->_color( $color ),
-		select_font_face => $font,
-		set_font_size => [$size],
-		move_to => [$x,$y],
-		rotate => [$angle],
-		show_text => [$string];
+	my $ctx = $self->{ctx};
+	$ctx->save;
 
-	$self->_ops( $ops );
+	my( $width, $height ) = $self->string_bounds( $font, $size, $string );
+
+	$ctx->move_to( $x, $y-$height );
+	$ctx->rotate( $angle );
+
+	my $layout = Pango::Cairo::create_layout( $self->{ctx} );
+	$font = Pango::FontDescription->from_string( "$font->[0] $size" );
+	$layout->set_font_description( $font );
+	$layout->set_markup( $string );
+
+	Pango::Cairo::show_layout( $self->{ctx}, $layout );
+
+	$ctx->restore;
 }
 
 =item ($w, $h) = $r->string_bounds( $font, $size, $string )
@@ -541,15 +548,22 @@ sub string_bounds($$$$)
 		$font = [ $font, GC_FONT_SLANT_NORMAL, GC_FONT_WEIGHT_NORMAL ];
 	}
 
+	my @parts = $self->_string_ops($string);
+
 	my $ctx = $self->{ctx};
 
 	$ctx->save;
-	$ctx->select_font_face( @$font );
-	$ctx->set_font_size( $size );
-	my $extents = $ctx->text_extents( $string );
+
+	my $layout = Pango::Cairo::create_layout( $self->{ctx} );
+	$font = Pango::FontDescription->from_string( "$font->[0] $size" );
+	$layout->set_font_description( $font );
+	$layout->set_markup( $string );
+
+	my( $extents ) = $layout->get_pixel_extents;
+
 	$ctx->restore;
 
-	return( $extents->{x_advance}, $extents->{height} );
+	return( $extents->{width}, $extents->{height} );
 }
 
 

@@ -45,7 +45,7 @@ use Carp;
 use Math::Trig;
 use Exporter;
 
-use Chart::Render;
+use Chart::Render qw( :ops );
 use Chart::Debug qw( trace debug );
 use FileHandle;
 
@@ -863,7 +863,13 @@ sub _check_data {
 					undef;
 		  }
 	  }
-	  $self->{f_y_tick} = sub { sprintf("10^%d", $_[0] ) };
+	  $self->{f_y_tick} = sub {
+		  if( int($_[0]) == $_[0] )
+		  {
+			  return "10<sup>$_[0]</sup>";
+		  }
+		  return sprintf("10<sup>%.2f</sup>", $_[0] );
+	  };
   }
 
   # find good min and max y-values for the plot
@@ -2782,7 +2788,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
+      $y2 = $y1 - ($delta * $_) + $h / 2;
 	  $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }
   }
@@ -2799,7 +2805,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
+      $y2 = $y1 - ($delta * $_) + $h / 2;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor,$font,$fsize,$x2,$y2,0,$label);
     }
@@ -2869,7 +2875,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
+      $y2 = $y1 - ($delta * $_) + $h / 2;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor, $font, $fsize, $x2, $y2, 0, $label);
     }

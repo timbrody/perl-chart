@@ -2,6 +2,27 @@ package Chart::Render;
 
 use Carp;
 use Math::Trig;
+use Exporter;
+
+use constant {
+	OP_SUBSCRIPT => 0x0001,
+	OP_SUPERSCRIPT => 0x0002,
+
+	SS_SCALAR => 1.33,
+};
+
+@ISA = qw( Exporter );
+@EXPORT = qw();
+@EXPORT_OK = qw(
+	OP_SUBSCRIPT
+	OP_SUPERSCRIPT
+);
+%EXPORT_TAGS = (
+	ops => [qw(
+		OP_SUBSCRIPT
+		OP_SUPERSCRIPT
+	)],
+);
 
 use strict;
 
@@ -58,6 +79,13 @@ sub formats { () }
 Create a new render surface for rendering to $format of size ($w,$h).
 
 =cut
+
+sub _string_ops
+{
+	my( $self, $string ) = @_;
+
+	return (\0, split /\0(.)/, $string);
+}
 
 =item $bytes = $r->render()
 
