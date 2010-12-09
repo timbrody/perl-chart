@@ -515,6 +515,8 @@ sub string($$$$$$$$)
 
 	$ctx->move_to( $x, $y-$height );
 	$ctx->rotate( $angle );
+	my( $op, $args ) = $self->_color( $color );
+	$ctx->$op( @$args );
 
 	my $layout = Pango::Cairo::create_layout( $self->{ctx} );
 	$font = Pango::FontDescription->from_string( "$font->[0] $size" );
