@@ -511,9 +511,9 @@ sub string($$$$$$$$)
 	my $ctx = $self->{ctx};
 	$ctx->save;
 
-	my( $width, $height ) = $self->string_bounds( $font, $size, $string );
+	my( $width, $height, undef, $offset ) = $self->string_bounds( $font, $size, $string );
 
-	$ctx->move_to( $x, $y-$height );
+	$ctx->move_to( $x + sin($angle)*$offset, $y - cos($angle)*($height+$offset) );
 	$ctx->rotate( $angle );
 	my( $op, $args ) = $self->_color( $color );
 	$ctx->$op( @$args );
@@ -562,10 +562,12 @@ sub string_bounds($$$$)
 	$layout->set_markup( $string );
 
 	my( $extents ) = $layout->get_pixel_extents;
+	my $baseline = Pango::units_to_double( $layout->get_baseline );
 
 	$ctx->restore;
 
-	return( $extents->{width}, $extents->{height} );
+	# two extra parameters are needed to correctly set the baseline
+	return( $extents->{width}, $baseline, $extents->{x}, $extents->{y} );
 }
 
 

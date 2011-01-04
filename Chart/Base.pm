@@ -2625,7 +2625,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
         if ( defined($_) ) {
 		  $label = $self->{f_x_tick}->($data->[0][$_*$self->{'skip_x_ticks'}]);
 		  my $w = $self->string_width($font,$fsize,$label);
-          $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'})) + $h/2;
+          $x2 = $x1 + ($delta*($_*$self->{'skip_x_ticks'})) - $h/2;
           $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
           $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL, $label);
         }
@@ -2636,7 +2636,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
         if ( defined($_) ) {
 		   $label = $self->{f_x_tick}->($data->[0][$_]);
 		   my $w = $self->string_width($font,$fsize,$label);
-           $x2 = $x1 + ($delta*$_) + $h/2;
+           $x2 = $x1 + ($delta*$_) - $h/2;
            $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
            $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL,$label);
          }
@@ -2647,7 +2647,7 @@ trace("$self->{x_ticks} at $y1: max-width=$self->{x_tick_label_width}, max-heigh
         if ( defined($_) ) {
 			$label = $self->{f_x_tick}->($data->[0][$_]);
 			my $w = $self->string_width($font,$fsize,$label);
-           $x2 = $x1 + ($delta*$_) + $h/2;
+           $x2 = $x1 + ($delta*$_) - $h/2;
            $y2 = $y1 - $self->{'x_tick_label_width'} + $w;
            $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, ANGLE_VERTICAL, $label);
          }
@@ -2788,7 +2788,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h / 2;
+      $y2 = $y1 - ($delta * $_) + $h;
 	  $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
     }
   }
@@ -2805,7 +2805,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h / 2;
+      $y2 = $y1 - ($delta * $_) + $h;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor,$font,$fsize,$x2,$y2,0,$label);
     }
@@ -2875,7 +2875,7 @@ sub _draw_y_ticks {
     for (0..$#labels) {
       $label = $self->{'y_tick_labels'}[$_];
 	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h / 2;
+      $y2 = $y1 - ($delta * $_) + $h;
       $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
       $self->{'surface'}->string($textcolor, $font, $fsize, $x2, $y2, 0, $label);
     }
