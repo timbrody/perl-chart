@@ -33,7 +33,7 @@ $g->set(
 	    skip_int_ticks     => 1000,
 	    text_space         => 3,
             title              => "Tickets",
-            title_font         => GD::Font->Giant,
+            title_font_size         => 16,
             transparent        => 'false',
             x_ticks            => 'vertical',
             y_axes             => 'both',

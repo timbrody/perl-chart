@@ -2,7 +2,6 @@
 
 use Chart::Mountain;         
 use File::Spec;
-use GD;
 
 print "1..2\n";
 
@@ -19,7 +18,8 @@ my @colors = map { [ map { hex($_) } unpack("a2 a2 a2", $_) ] } @hex_colors;
 my @patterns = ();
 foreach (1..@data-1) { 
 	open(PNG, '<'.File::Spec->catfile(File::Spec->curdir, 'patterns', "PATTERN$_.PNG")) || die "Can't load pattern $_";
-	push(@patterns, GD::Image->newFromPng(\*PNG));
+	sysread(PNG, my $bytes, -s PNG);
+	push(@patterns, Chart::Render->pattern_from_png( $bytes ));
 	close(PNG);
 }
 

@@ -38,6 +38,8 @@ sub new
 {
 	my( $class, $format, $w, $h ) = @_;
 
+	$class = ref($class) || $class;
+
 	return $class->new_svg( $w, $h ) if( $format eq "svg" );
 	return $class->new_png( $w, $h ) if( $format eq "png" );
 
@@ -109,14 +111,23 @@ sub _color
 {
 	my( $self, $color ) = @_;
 
-	if( !defined $color or ref($color) ne "ARRAY" )
+	Carp::confess "Color undefined" if !defined $color;
+
+	if( UNIVERSAL::isa( $color, "Cairo::Pattern" ) )
 	{
-		Carp::croak "Color undefined or not an array reference";
+		return set_source => [$color];
 	}
 
-	my @color = map { $_ / 255 } @$color;
+	if( ref($color) ne "ARRAY" )
+	{
+		Carp::croak "Expected array reference but got $color";
+	}
 
-	return scalar(@$color) == 3 ? (set_source_rgb => \@color) : (set_source_rgba => \@color);
+	my @color = @$color;
+
+	$_ /= 255 for @color;
+
+	return scalar(@color) == 3 ? (set_source_rgb => \@color) : (set_source_rgba => \@color);
 }
 
 sub _stroke
@@ -227,7 +238,7 @@ sub arc($$$$$$$$$)
 	push @$ops,
 		$self->_color( $color ),
 		$self->_line( $thickness ),
-		$self->_arc( $x, $y, $w, $h, $s, $e );
+		$self->_arc( $x, $y, $w, $h, $s, $e, 1 );
 
 	$self->_stroke( $ops );
 }
@@ -394,6 +405,39 @@ sub line($$$$)
 	$self->_stroke( $ops );
 }
 
+=item $pattern = Chart::Render->pattern_from_png( $data [, %opts ] )
+
+Create a new pattern from a PNG format image.
+
+Options:
+
+	extend - one of 'repeat', 'reflect' or 'pad'
+
+=cut
+
+sub pattern_from_png
+{
+	my( $self, $data, %opts ) = @_;
+
+	use bytes;
+	local $_;
+
+	my $extend = $opts{extend} || 'repeat';
+
+	pos($data) = 0;
+	my $img = Cairo::ImageSurface->create_from_png_stream(sub {
+		$_ = substr($data,pos($data),$_[1]);
+		pos($data) += $_[1];
+		return $_;
+	});
+	Carp::croak "Empty or broken PNG stream" if $img->status ne "success";
+
+	my $pat = Cairo::SurfacePattern->create( $img );
+	$pat->set_extend( $extend );
+
+	return $pat;
+}
+
 =item $r->polygon( $color, $thickness, $points )
 
 Draw a polygon along $points, including a line from the last point to the first.
@@ -537,6 +581,8 @@ Return the bounding box (width x height) that $string will use when rendered in 
 sub string_bounds($$$$)
 {
 	my( $self, $font, $size, $string ) = @_;
+
+	return(0,0,0,0) if !defined $string;
 
 	utf8::upgrade( $string ) if !utf8::is_utf8( $string );
 

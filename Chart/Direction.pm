@@ -19,30 +19,35 @@
 
 package Chart::Direction;
 
-use Chart::Base 2.3;
-use GD;
-use Carp;
-use strict;
-use POSIX;
+use Chart::Base 3.0;
+use POSIX; # ceil
 
-@Chart::Direction::ISA = qw(Chart::Base);
-$Chart::Direction::VERSION = '2.3';
+@ISA = qw(Chart::Base);
+$VERSION = $Chart::Base::VERSION;
+
+use strict;
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
+sub _init
+{
+	my $self = shift;
 
+	my $rc = $self->SUPER::_init( @_ );
+
+	# backwards-compatibility
+	for(1..20) {
+		$self->{'pointStyle' . $_} = 'circle';
+	}
+
+	return $rc;
+}
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  private methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
-
-#we don't need a legend for this type.
-#sub _draw_legend {
-
-#    return 1;
-#}
 
 # we use the find_y_scale methode to det the labels of the circles and the amount of them
 sub _find_y_scale
@@ -86,7 +91,7 @@ sub _find_y_scale
 	    # Assert against the min is larger than the max.
 	    if( $d_min > $d_max )
 	    {
-	     croak "The the specified 'min_val' & 'max_val' values are reversed (min > max: $d_min>$d_max)";
+	     Carp::croak "The the specified 'min_val' & 'max_val' values are reversed (min > max: $d_min>$d_max)";
 	     }
 
 	     # Calculate the width of the dataset. (posibly modified by the user)
@@ -164,13 +169,13 @@ sub _calcTickInterval
 	# Verify the supplied 'min_y_ticks' & 'max_y_ticks' are sensible.
 	if( $minTicks < 2 )
 	{
-		print STDERR "Chart::Base : Incorrect value for 'min_circles', too small.\n";
+		Carp::carp "Chart::Base : Incorrect value for 'min_circles', too small.\n";
 		$minTicks = 2;
 	}
 
 	if( $maxTicks < 5*$minTicks  )
 	{
-		print STDERR "Chart::Base : Incorrect value for 'max_circles', too small.\n";
+		Carp::carp "Chart::Base : Incorrect value for 'max_circles', too small.\n";
 		$maxTicks = 5*$minTicks;
 	}
 
@@ -195,7 +200,7 @@ sub _calcTickInterval
                                 # just for security:
                                 if ( !defined($divisor) || $divisor == 0 ) { $divisor = 1; }
 				($tickCount, $pMin, $pMax) = $self->_countTicks($min, $max, 1/$divisor);
-				print "\nChart::Base : Caution: Tick limit of $maxTicks exceeded. Backing of to an interval of ".1/$divisor." which plots $tickCount ticks\n";
+				Carp::carp "Chart::Base : Caution: Tick limit of $maxTicks exceeded. Backing of to an interval of ".1/$divisor." which plots $tickCount ticks\n";
 				return(1/$divisor, $tickCount, $pMin, $pMax);
 			}
 			elsif( $minTicks > $tickCount )
@@ -224,23 +229,21 @@ sub _calcTickInterval
 sub _draw_y_ticks {
   my $self = shift;
   my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
-  my $textcolor = $self->_color_role_to_index('text');
-  my $background = $self->_color_role_to_index('background');
+  my $misccolor = $self->_color_role_to_rgb('misc');
+  my $textcolor = $self->_color_role_to_rgb('text');
+  my $background = $self->_color_role_to_rgb('background');
   my @labels = @{$self->{'y_tick_labels'}};
   my ($width, $height, $centerX, $centerY, $diameter);
-  my ($pi, $font, $fontW, $fontH, $labelX, $labelY, $label_offset);
+  my ($labelX, $labelY, $label_offset);
   my ($dia_delta, $dia, $x, $y, @label_degrees, $arc, $angle_interval);
 
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+
   # set up initial constant values
-  $pi = 3.14159265358979323846;
-  $font = $self->{'legend_font'};
-  $fontW = $self->{'legend_font'}->width;
-  $fontH = $self->{'legend_font'}->height;
   $angle_interval = $self->{'angle_interval'};
 
   if ($self->{'grey_background'}) {
-      $background = $self->_color_role_to_index('grey_background');
+      $background = $self->_color_role_to_rgb('grey_background');
   }
   # init the imagemap data field if they wanted it
   if ($self->{'imagemap'}) {
@@ -312,7 +315,7 @@ sub _draw_y_ticks {
      $angle_interval = 90;
   }
   else {
-     carp "The angle_interval must be between 0 and 90!\nCorrected value: 30";
+     Carp::carp "The angle_interval must be between 0 and 90!\nCorrected value: 30";
      @label_degrees = qw(180 150 120 90 60 30 0 330 300 270 240 210);
      $angle_interval = 30;
   }
@@ -324,35 +327,53 @@ sub _draw_y_ticks {
       #some ugly correcture
       if ($_ == '270') { $y++;}
       #draw the line
-      $self->{'gd_obj'}->line($centerX, $centerY, $x, $y, $misccolor);
+      $self->{'surface'}->line($misccolor, $self->{line_size}, $centerX, $centerY, $x, $y);
       #calculate the string point
-      $x = sin ($arc)*($diameter/2+30) + $centerX-8;
-      $y = cos  ($arc)*($diameter/2+28) + $centerY-6;
+	  my $label = $_.'°';
+	  my( $w, $h ) = $self->{surface}->string_bounds($font, $fsize, $label);
+      $x = sin ($arc)*($diameter/2+30) + $centerX - $w/2;
+      $y = cos  ($arc)*($diameter/2+28) + $centerY + $h/2;
       #draw the labels
-      $self->{'gd_obj'}->string($font, $x, $y, $_.'°', $textcolor);
-      $arc += (($angle_interval)/360) *2*$pi;
+      $self->{'surface'}->string($textcolor, $font, $fsize, $x, $y, 0, $label);
+      $arc += (($angle_interval)/360) *2*Math::Trig::pi;
   }
       
   #draw the circles
-  $dia = 0;
-  foreach (@labels) {
-      $self->{'gd_obj'}->arc($centerX,$centerY,
-                    $dia, $dia,
-                    0, 360,
-                    $misccolor);
+  $dia = $dia_delta;
+  foreach (@labels[1..$#labels]) {
+      $self->{'surface'}->arc($misccolor, $self->{line_size},
+	  				$centerX,
+					$centerY,
+                    $dia,
+					$dia,
+                    0,
+					2*Math::Trig::pi );
       $dia += $dia_delta;
   }
   
-  $self->{'gd_obj'}->filledRectangle($centerX-length($labels[0])/2*$fontW-2,
-                                     $centerY+2,
-                                     $centerX+2+$diameter/2,
-                                     $centerY+$fontH+2,
-                                     $background);
+	# white-out the background for the x-labels
+	my( $w, $h ) = $self->{surface}->string_bounds(
+		$font,
+		$fsize,
+		$labels[0]
+	);
+  $self->{'surface'}->filled_rectangle($background, 0,
+		  $centerX-$w/2-2,
+		  $centerY,
+		  $centerX+2+$diameter/2,
+		  $centerY+$h+2
+		);
+
   #draw the labels of the circles
   $dia = 0;
   foreach (@labels) {
-       $self->{'gd_obj'}->string($font, $centerX+$dia/2-length($_)/2*$fontW,
-                                 $centerY+2, $_, $textcolor);
+		my( $w, $h ) = $self->{surface}->string_bounds(
+			$font,
+			$fsize,
+			$_
+		);
+
+       $self->{'surface'}->string($textcolor, $font, $fsize, $centerX+$dia/2-$w/2, $centerY+$h+2, 0, $_);
        $dia += $dia_delta;
   }
        
@@ -371,759 +392,185 @@ sub _draw_x_ticks {
 
 ## finally get around to plotting the data
 sub _draw_data {
-  my $self = shift;
-  my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
-  my $textcolor = $self->_color_role_to_index('text');
-  my $background = $self->_color_role_to_index('background');
-  my ($width, $height, $centerX, $centerY, $diameter);
-  my ($mod, $map, $i, $j, $brush, $color, $x, $y, $winkel, $first_x, $first_y );
-  my ($arrow_x, $arrow_y, $m);
-  $color = 1;
-
-  my $pi = 3.14159265358979323846;
-  my $len = 10;
-  my $alpha = 1;
-  my $last_x = undef;
-  my $last_y = undef;
-  my $diff;
-  my $n=0;
-  
-  
-  
-  
-  
-  if ($self->{'pairs'}) {
-     my $a = $self->{'num_datasets'}/2;
-     my $b = ceil($a);
-     my $c = $b-$a;
-    
-     if ($c == 0) {
-     croak "Wrong number of datasets for 'pairs'";
-     }
-    }
-  
- 
-  # init the imagemap data field if they wanted it
-  if ($self->{'imagemap'}) {
-    $self->{'imagemap_data'} = [];
-  }
-
-  # find width and height
-  $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
-  $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-  
-  # get the base values
-  $mod = $self->{'min_val'};
-  $centerX = $self->{'centerX'};
-  $centerY = $self->{'centerY'};
-  $diameter = $self->{'diameter'};
-  $diff = $self->{'max_val'} - $self->{'min_val'};
-  $diff = 1 if $diff < 1;
-  $map = $diameter/2/$diff;
-  
-  
-  $brush = $self->_prepare_brush ($color, 'point');
-  $self->{'gd_obj'}->setBrush ($brush);
-
- 
-  # draw every line for this dataset
-  
-  if ($self->{'pairs'}) { 
-  
-    for  $j (1..$self->{'num_datasets'}) {
-       $color = $self->_color_role_to_index('dataset'.($j-1));
-     
-      for $i (0..$self->{'num_datapoints'}-1) {
-           
-      # don't try to draw anything if there's no data
-      if (defined ($data->[$j][$i]) && $data->[$j][$i] <= $self->{'max_val'}
-          &&  $data->[$j][$i] >= $self->{'min_val'}) {
-	  
-        #calculate the point
-	$winkel = (180 - ($data->[0][$i] % 360)) /360 * 2* $pi;
-
-        $x = ceil($centerX + sin ($winkel) * ($data->[$j][$i] - $mod) * $map);
-        $y = ceil($centerY + cos ($winkel) * ($data->[$j][$i] - $mod) * $map);
-
-	# set the x and y values back
-	if ($i ==0) {
-	    $first_x = $x;
-	    $first_y = $y;
-	    $last_x = $x;
-            $last_y = $y;
-	    }
-	    
-	
-        if ($self->{'point'}) {
-          $brush = $self->_prepare_brush ($color, 'point');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the point
-          $self->{'gd_obj'}->line($x+1, $y, $x, $y, gdBrushed);
-        }
-        if ($self->{'line'}) {
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the line
-          if (defined $last_x) {
-	     $self->{'gd_obj'}->line($x, $y, $last_x, $last_y, gdBrushed);
-          }
-          else {}
-	
-        }
-	
-	
-        if ($self->{'arrow'}) {
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the arrow
-          if ($data->[$j][$i] > $self->{'min_val'}) {
-            $self->{'gd_obj'}->line($x, $y, $centerX, $centerY, gdBrushed);
-
-            $arrow_x =  $x - cos($winkel-$alpha )*$len;
-            $arrow_y = $y + sin($winkel-$alpha)*$len;
-            $self->{'gd_obj'}->line($x, $y, $arrow_x, $arrow_y, gdBrushed);
-
-            $arrow_x = $x + sin($pi/2-$winkel-$alpha )*$len;
-            $arrow_y = $y - cos($pi/2-$winkel-$alpha)*$len;
-            $self->{'gd_obj'}->line($x, $y, $arrow_x, $arrow_y, gdBrushed);
-
-            
-          }
-        }
-
-        $last_x = $x;
-        $last_y = $y;
-        
-        
-	# store the imagemap data if they asked for it
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [$x, $y ];
- 	}
-      } else {
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [ undef(), undef() ];
-
-        }
-      }
-    }
-    
-    # draw the last line to the first point    
-    if ($self->{'line'}) {
-      $self->{'gd_obj'}->line($x, $y, $first_x, $first_y, gdBrushed);
-      }
-      
-    }
-  }
-  
- 
-  if ($self->{'pairs'}) {
-     
-     for  ($j = 1; $j <= $self->{'num_datasets'}; $j+=2) {
-       if ($j ==1) {
-         $color = $self->_color_role_to_index('dataset'.($j-1));
-	 }
-       else {
-         $color = $self->_color_role_to_index('dataset'.($j/2-0.5));
-        }
-       for $i (0..$self->{'num_datapoints'}-1) {
-          
-      # don't try to draw anything if there's no data
-      if (defined ($data->[$j][$i]) && $data->[$j][$i] <= $self->{'max_val'}
-          &&  $data->[$j][$i] >= $self->{'min_val'}) {
-	  
-        # calculate the point
-	$winkel = (180 - ($data->[$n][$i] % 360)) /360 * 2* $pi;
-
-        $x = ceil($centerX + sin ($winkel) * ($data->[$j][$i] - $mod) * $map);
-        $y = ceil($centerY + cos ($winkel) * ($data->[$j][$i] - $mod) * $map);
-
-	# set the x and y values back
-	if ($i ==0) {
-	    $first_x = $x;
-	    $first_y = $y;
-	    $last_x = $x;
-            $last_y = $y;
-	    }
-	    
-	
-        if ($self->{'point'}) {
-          $brush = $self->_prepare_brush ($color, 'point');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the point
-          $self->{'gd_obj'}->line($x+1, $y, $x, $y, gdBrushed);
-        }
-        if ($self->{'line'}) {
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the line
-          if (defined $last_x) {
-	     $self->{'gd_obj'}->line($x, $y, $last_x, $last_y, gdBrushed);
-          }
-          else {}
-	  
-         }
-	
-	
-        if ($self->{'arrow'}) {
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
-          #draw the arrow
-          if ($data->[$j][$i] > $self->{'min_val'}) {
-            $self->{'gd_obj'}->line($x, $y, $centerX, $centerY, gdBrushed);
-
-            $arrow_x =  $x - cos($winkel-$alpha )*$len;
-            $arrow_y = $y + sin($winkel-$alpha)*$len;
-            $self->{'gd_obj'}->line($x, $y, $arrow_x, $arrow_y, gdBrushed);
-
-            $arrow_x = $x + sin($pi/2-$winkel-$alpha )*$len;
-            $arrow_y = $y - cos($pi/2-$winkel-$alpha)*$len;
-            $self->{'gd_obj'}->line($x, $y, $arrow_x, $arrow_y, gdBrushed);
-
-            
-          }
-        }
-
-        $last_x = $x;
-        $last_y = $y;
-        
-        
-	# store the imagemap data if they asked for it
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [$x, $y ];
- 	}
-      } else {
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [ undef(), undef() ];
-
-        }
-      }
-    }
-    
-    # draw the last line to the first point    
-    if ($self->{'line'}) {
-      $self->{'gd_obj'}->line($x, $y, $first_x, $first_y, gdBrushed);
-      }
-      $n+=2;
-     }
-     
-   }
- 
- # now outline it  
-   $self->{'gd_obj'}->rectangle ($self->{'curr_x_min'} ,
-                                 $self->{'curr_y_min'},
-                                 $self->{'curr_x_max'},
-                                 $self->{'curr_y_max'},
-                                 $misccolor);
-
-  return;
-
-}
-
-
-##  set the gdBrush object to trick GD into drawing fat lines
-sub _prepare_brush {
-  my $self = shift;
-  my $color = shift;
-  my $type = shift;
-  my ($radius, @rgb, $brush, $white, $newcolor);
-   
-  @rgb = $self->{'gd_obj'}->rgb($color);
-
-  # get the appropriate brush size
-  if ($type eq 'line') {
-    $radius = $self->{'brush_size'}/2;
-  }
-  elsif ($type eq 'point') {
-    $radius = $self->{'pt_size'}/2;
-  }
-
-  # create the new image
-  $brush = GD::Image->new ($radius*2, $radius*2);
-
-  # get the colors, make the background transparent
-  $white = $brush->colorAllocate (255,255,255);
-  $newcolor = $brush->colorAllocate (@rgb);
-  $brush->transparent ($white);
-
-  # draw the circle
-  $brush->arc ($radius-1, $radius-1, $radius, $radius, 0, 360, $newcolor);
-
-  # fill it if we're using lines
-  $brush->fill ($radius-1, $radius-1, $newcolor);
-  
-  #}
-
-  # set the new image as the main object's brush
-  return $brush;
-}
-
-
-
-sub _draw_legend {
-  my $self = shift;
-  my ($length);
-
-  # check to see if legend type is none..
-  if ($self->{'legend'} =~ /^none$/) {
-    return 1;
-  }
-  # check to see if they have as many labels as datasets,
-  # warn them if not
-  if (($#{$self->{'legend_labels'}} >= 0) && 
-       ((scalar(@{$self->{'legend_labels'}})) != $self->{'num_datasets'})) {
-    carp "The number of legend labels and datasets doesn\'t match";
-  }
-
-  # init a field to store the length of the longest legend label
-  unless ($self->{'max_legend_label'}) {
-    $self->{'max_legend_label'} = 0;
-  }
-
-  # fill in the legend labels, find the longest one
-  
-  if ($self->{'pairs'}) {
-  for (1..$self->{'num_datasets'}) {
-    unless ($self->{'legend_labels'}[$_-1]) {
-      $self->{'legend_labels'}[$_-1] = "Dataset $_";
-    }
-    $length = length($self->{'legend_labels'}[$_-1]);
-    if ($length > $self->{'max_legend_label'}) {
-      $self->{'max_legend_label'} = $length;
-    }
-  }
-  }
-  
-  if ($self->{'pairs'}) {
-  
-   for (1..ceil($self->{'num_datasets'}/2)) {
-    unless ($self->{'legend_labels'}[$_-1]) {
-      $self->{'legend_labels'}[$_-1] = "Dataset $_";
-    }
-    $length = length($self->{'legend_labels'}[$_-1]);
-    if ($length > $self->{'max_legend_label'}) {
-      $self->{'max_legend_label'} = $length;
-    }
-  }
- }
-      
-  # different legend types
-  if ($self->{'legend'} eq 'bottom') {
-    $self->_draw_bottom_legend;
-  }
-  elsif ($self->{'legend'} eq 'right') {
-    $self->_draw_right_legend;
-  }
-  elsif ($self->{'legend'} eq 'left') {
-    $self->_draw_left_legend;
-  }
-  elsif ($self->{'legend'} eq 'top') {
-    $self->_draw_top_legend;
-  } else {
-    carp "I can't put a legend there (at ".$self->{'legend'}.")\n";
-  }
-
-  # and return
-  return 1;
-}
-
-## put the legend on the bottom of the chart
-sub _draw_bottom_legend {
-  my $self = shift;
-  my @labels = @{$self->{'legend_labels'}};
-  my ($x1, $y1, $x2, $x3, $y2, $empty_width, $max_label_width, $cols, $rows, $color, $brush);
-  my ($col_width, $row_height, $r, $c, $index, $x, $y, $w, $h, $axes_space);
-  my $font = $self->{'legend_font'};
-
-
-  # make sure we're using a real font
-  unless ((ref ($font)) eq 'GD::Font') {
-    croak "The subtitle font you specified isn\'t a GD Font object";
-  }
-
-  # get the size of the font
-  ($h, $w) = ($font->height, $font->width);
-
-  # find the base x values
-  $axes_space = ($self->{'y_tick_label_length'} * $self->{'tick_label_font'}->width)
-	        + $self->{'tick_len'} + (3 * $self->{'text_space'});
-  $x1 = $self->{'curr_x_min'} + $self->{'graph_border'};
-  $x2 = $self->{'curr_x_max'} - $self->{'graph_border'};
-
-  if ($self->{'y_axes'} =~ /^right$/i) {
-     $x2 -= $axes_space;
-  }
-  elsif ($self->{'y_axes'} =~ /^both$/i) {
-     $x2 -= $axes_space;
-   #  $x1 += $axes_space;
-  }
-  else {
-   #  $x1 += $axes_space;
-     
-  }
-
-
-  if ($self->{'y_label'}) {
-    $x1 += $self->{'label_font'}->height + 2 * $self->{'text_space'};
-  }
-  if ($self->{'y_label2'}) {
-    $x2 -= $self->{'label_font'}->height + 2 * $self->{'text_space'};
-  }
-
-  # figure out how wide the columns need to be, and how many we
-  # can fit in the space available
-  $empty_width = ($x2 - $x1) - (2 * $self->{'legend_space'});
-  $max_label_width = $self->{'max_legend_label'} * $w
-    + (4 * $self->{'text_space'}) + $self->{'legend_example_size'};
-  $cols = int ($empty_width / $max_label_width);
-  unless ($cols) {
-    $cols = 1;
-  }
-  $col_width = $empty_width / $cols;
-
-  # figure out how many rows we need, remember how tall they are
-  $rows = int ($self->{'num_datasets'} / $cols);
-  unless (($self->{'num_datasets'} % $cols) == 0) {
-    $rows++;
-  }
-  unless ($rows) {
-    $rows = 1;
-  }
-  $row_height = $h + $self->{'text_space'};
-
-  # box the legend off
-  $y1 = $self->{'curr_y_max'} - $self->{'text_space'}
-          - ($rows * $row_height) - (2 * $self->{'legend_space'});
-  $y2 = $self->{'curr_y_max'};
- 
-  
-  $self->{'gd_obj'}->rectangle($x1, $y1, $x2, $y2, 
-                               $self->_color_role_to_index('misc'));
- 
-  $x1 += $self->{'legend_space'} + $self->{'text_space'};
-  $x2 -= $self->{'legend_space'};
-  $y1 += $self->{'legend_space'} + $self->{'text_space'};
-  $y2 -= $self->{'legend_space'} + $self->{'text_space'};
-
-  # draw in the actual legend
-  for $r (0..$rows-1) {
-    for $c (0..$cols-1) {
-      $index = ($r * $cols) + $c;  # find the index in the label array
-      if ($labels[$index]) {
-	# get the color
-        $color = $self->_color_role_to_index('dataset'.$index); 
-
-        # get the x-y coordinate for the start of the example line
-	$x = $x1 + ($col_width * $c);
-        $y = $y1 + ($row_height * $r) + $h/2;
-	
-	# now draw the example line
-        $self->{'gd_obj'}->line($x, $y, 
-                                $x + $self->{'legend_example_size'}, $y,
-                                $color);
-
-        # reset the brush for points
-        $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $index});
-        $self->{'gd_obj'}->setBrush($brush);
-        # draw the point
-        $x3 = int($x + $self->{'legend_example_size'}/2);
-        $self->{'gd_obj'}->line($x3, $y, $x3, $y, gdBrushed);
-
-        # adjust the x-y coordinates for the start of the label
-	$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-        $y = $y1 + ($row_height * $r);
-
-	# now draw the label
-	$self->{'gd_obj'}->string($font, $x, $y, $labels[$index], $color);
-      }
-    }
-  }
-
-  # mark off the space used
-  $self->{'curr_y_max'} -= ($rows * $row_height) + $self->{'text_space'}
-			      + (2 * $self->{'legend_space'}); 
-
-  # now return
-  return 1;
-}
-
-## put the legend on top of the chart
-sub _draw_top_legend {
-  my $self = shift;
-  my @labels = @{$self->{'legend_labels'}};
-  my ($x1, $y1, $x2, $x3, $y2, $empty_width, $max_label_width, $cols, $rows, $color, $brush);
-  my ($col_width, $row_height, $r, $c, $index, $x, $y, $w, $h, $axes_space);
-  my $font = $self->{'legend_font'};
-
-  # make sure we're using a real font
-  unless ((ref ($font)) eq 'GD::Font') {
-    croak "The subtitle font you specified isn\'t a GD Font object";
-  }
-
-  # get the size of the font
-  ($h, $w) = ($font->height, $font->width);
-
-  # find the base x values
-  $axes_space = ($self->{'y_tick_label_length'} * $self->{'tick_label_font'}->width)
-	        + $self->{'tick_len'} + (3 * $self->{'text_space'});
-  $x1 = $self->{'curr_x_min'} + $self->{'graph_border'};
-  $x2 = $self->{'curr_x_max'} - $self->{'graph_border'};
-
-  if ($self->{'y_axes'} =~ /^right$/i) {
-     $x2 -= $axes_space;
-  }
-  elsif ($self->{'y_axes'} =~ /^both$/i) {
-     $x2 -= $axes_space;
-    # $x1 += $axes_space;
-  }
-  else {
-    # $x1 += $axes_space;
-  }
-
-  # figure out how wide the columns can be, and how many will fit
-  $empty_width = ($x2 - $x1) - (2 * $self->{'legend_space'});
-  $max_label_width = (4 * $self->{'text_space'})
-    + ($self->{'max_legend_label'} * $w)
-    + $self->{'legend_example_size'};
-  $cols = int ($empty_width / $max_label_width);
-  unless ($cols) {
-    $cols = 1;
-  }
-  $col_width = $empty_width / $cols;
-
-  # figure out how many rows we need and remember how tall they are
-  $rows = int ($self->{'num_datasets'} / $cols);
-  unless (($self->{'num_datasets'} % $cols) == 0) {
-    $rows++;
-  }
-  unless ($rows) {
-    $rows = 1;
-  }
-  $row_height = $h + $self->{'text_space'};
-
-  # box the legend off
-  $y1 = $self->{'curr_y_min'};
-  $y2 = $self->{'curr_y_min'} + $self->{'text_space'}
-          + ($rows * $row_height) + (2 * $self->{'legend_space'});
-  $self->{'gd_obj'}->rectangle($x1, $y1, $x2, $y2, 
-                               $self->_color_role_to_index('misc'));
-
-  # leave some space inside the legend
-  $x1 += $self->{'legend_space'} + $self->{'text_space'};
-  $x2 -= $self->{'legend_space'};
-  $y1 += $self->{'legend_space'} + $self->{'text_space'};
-  $y2 -= $self->{'legend_space'} + $self->{'text_space'};
-
-  # draw in the actual legend
-  for $r (0..$rows-1) {
-    for $c (0..$cols-1) {
-      $index = ($r * $cols) + $c;  # find the index in the label array
-      if ($labels[$index]) {
-	# get the color
-        $color = $self->_color_role_to_index('dataset'.$index); 
-        
-	# find the x-y coords
-	$x = $x1 + ($col_width * $c);
-        $y = $y1 + ($row_height * $r) + $h/2;
-
-	# draw the line first
-        $self->{'gd_obj'}->line($x, $y, 
-                                $x + $self->{'legend_example_size'}, $y,
-                                $color);
-
-        # reset the brush for points
-        $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $index});
-        $self->{'gd_obj'}->setBrush($brush);
-        # draw the point
-        $x3 = int($x + $self->{'legend_example_size'}/2);
-        $self->{'gd_obj'}->line($x3, $y, $x3, $y, gdBrushed);
-
-        # now the label
-	$x += $self->{'legend_example_size'} + (2 * $self->{'text_space'});
-	$y -= $h/2;
-	$self->{'gd_obj'}->string($font, $x, $y, $labels[$index], $color);
-      }
-    }
-  }
-      
-  # mark off the space used
-  $self->{'curr_y_min'} += ($rows * $row_height) + $self->{'text_space'}
-			      + 2 * $self->{'legend_space'}; 
-
-  # now return
-  return 1;
-}
-
-
-
-sub _draw_left_legend {
-  my $self = shift;
-  my @labels = @{$self->{'legend_labels'}};
-  my ($x1, $x2, $x3, $y1, $y2, $width, $color, $misccolor, $w, $h, $brush);
-  my $font = $self->{'legend_font'};
- 
-  # make sure we're using a real font
-  unless ((ref ($font)) eq 'GD::Font') {
-    croak "The subtitle font you specified isn\'t a GD Font object";
-  }
-
-  # get the size of the font
-  ($h, $w) = ($font->height, $font->width);
-
-  # get the miscellaneous color
-  $misccolor = $self->_color_role_to_index('misc');
-
-  # find out how wide the largest label is
-  $width = (2 * $self->{'text_space'})
-    + ($self->{'max_legend_label'} * $w)
-    + $self->{'legend_example_size'}
-    + (2 * $self->{'legend_space'});
-
-  # get some base x-y coordinates
-  $x1 = $self->{'curr_x_min'};
-  $x2 = $self->{'curr_x_min'} + $width;
-  $y1 = $self->{'curr_y_min'} + $self->{'graph_border'} ;
-  
-  if ($self->{'pairs'}) {
-  $y2 = $self->{'curr_y_min'} + $self->{'graph_border'} + $self->{'text_space'}
-          + (($self->{'num_datasets'}/2) * ($h + $self->{'text_space'}))
-	  + (4 * $self->{'legend_space'});
-     }
-  else {
-  $y2 = $self->{'curr_y_min'} + $self->{'graph_border'} + $self->{'text_space'}
-        + ($self->{'num_datasets'} * ($h + $self->{'text_space'}))
-	+ (2 * $self->{'legend_space'});
+	my $self = shift;
+	my $data = $self->{'dataref'};
+	my $misccolor = $self->_color_role_to_rgb('misc');
+	my $textcolor = $self->_color_role_to_rgb('text');
+	my $background = $self->_color_role_to_rgb('background');
+	my ($width, $height, $centerX, $centerY, $diameter);
+	my ($mod, $map, $i, $j, $brush, $color, $x, $y, $winkel, $first_x, $first_y );
+	my ($arrow_x, $arrow_y, $m);
+	$color = 1;
+	my $brush_size = $self->{brush_size};
+
+	my $len = 10;
+	my $alpha = 1;
+	my $last_x = undef;
+	my $last_y = undef;
+	my $diff;
+	my $n=0;
+
+
+
+
+
+	if ($self->{'pairs'}) {
+		my $a = $self->{'num_datasets'}/2;
+		my $b = ceil($a);
+		my $c = $b-$a;
+
+		if ($c == 0) {
+			Carp::croak "Wrong number of datasets for 'pairs'";
+		}
 	}
-	
-  # box the legend off
-  $self->{'gd_obj'}->rectangle ($x1, $y1, $x2, $y2, $misccolor);
 
-  # leave that nice space inside the legend box
-  $x1 += $self->{'legend_space'};
-  $y1 += $self->{'legend_space'} + $self->{'text_space'};
 
-  # now draw the actual legend
-  for (0..$#labels) {
-    # get the color
-    my $c = $self->{'num_datasets'}-$_-1;
-    $color = $self->_color_role_to_index('dataset'.$_);
-    
-    # find the x-y coords
-    $x2 = $x1;
-    $x3 = $x2 + $self->{'legend_example_size'};
-    $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
+# init the imagemap data field if they wanted it
+	if ($self->{'imagemap'}) {
+		$self->{'imagemap_data'} = [];
+	}
 
-    # do the line first
-    $self->{'gd_obj'}->line ($x2, $y2, $x3, $y2, $color);
+# find width and height
+	$width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
+	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
 
-    # reset the brush for points
-    $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $_});
-    $self->{'gd_obj'}->setBrush($brush);
-    # draw the point
-    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-				int(($x3+$x2)/2), $y2, gdBrushed);
-    
-    # now the label
-    $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 -= $h/2;
-    
-    # order of the datasets in the legend
-    $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$_], $color);
-   }
+# get the base values
+	$mod = $self->{'min_val'};
+	$centerX = $self->{'centerX'};
+	$centerY = $self->{'centerY'};
+	$diameter = $self->{'diameter'};
+	$diff = $self->{'max_val'} - $self->{'min_val'};
+	$diff = 1 if $diff < 1;
+	$map = $diameter/2/$diff;
 
-  # mark off the used space
-  $self->{'curr_x_min'} += $width;
 
-  # and return
-  return 1;
+# draw every line for this dataset
+
+	if (!$self->{'pairs'}) { 
+
+		for  $j (1..$self->{'num_datasets'}) {
+			my @lines;
+			$color = $self->_color_role_to_rgb('dataset'.($j-1));
+
+			for $i (0..$self->{'num_datapoints'}-1) {
+
+# don't try to draw anything if there's no data
+				if (defined ($data->[$j][$i]) && $data->[$j][$i] <= $self->{'max_val'}
+						&&  $data->[$j][$i] >= $self->{'min_val'}) {
+
+#calculate the point
+					$winkel = (180 - ($data->[0][$i] % 360)) /360 * 2* Math::Trig::pi;
+
+					$x = ceil($centerX + sin ($winkel) * ($data->[$j][$i] - $mod) * $map);
+					$y = ceil($centerY + cos ($winkel) * ($data->[$j][$i] - $mod) * $map);
+
+					push @lines, [$x, $y];
+
+					if ($self->{'arrow'}) {
+						$self->{surface}->line( $color, $brush_size, $centerX, $centerY, $x, $y );
+#draw the arrow
+						if ($data->[$j][$i] > $self->{'min_val'}) {
+							$self->{surface}->point( $color, $brush_size*6, $x, $y, -$winkel + Math::Trig::pi, 'chevron' );
+						}
+					}
+
+# store the imagemap data if they asked for it
+					if ($self->{'imagemap'}) {
+						$self->{'imagemap_data'}->[$j][$i] = [$x, $y ];
+					}
+				} else {
+					if ($self->{'imagemap'}) {
+						$self->{'imagemap_data'}->[$j][$i] = [ undef(), undef() ];
+
+					}
+				}
+			} # end of points
+
+# draw the line 
+			if ($self->{'line'}) {
+				$self->{surface}->polygon ($color, $brush_size, \@lines);
+			}
+			my $shape = $self->{'pointStyle'.$j};
+			if (!$self->{arrow} && $shape) {
+				foreach my $p (@lines) {
+					$self->{surface}->point ($color, $brush_size*3, @$p, 0, $shape);
+				}
+			}
+
+		}
+	}
+
+
+	if ($self->{'pairs'}) {
+		for  ($j = 1; $j <= $self->{'num_datasets'}; $j+=2) {
+			my @lines;
+			if ($j ==1) {
+				$color = $self->_color_role_to_rgb('dataset'.($j-1));
+			}
+			else {
+				$color = $self->_color_role_to_rgb('dataset'.($j/2-0.5));
+			}
+			for $i (0..$self->{'num_datapoints'}-1) {
+
+# don't try to draw anything if there's no data
+				if (defined ($data->[$j][$i]) && $data->[$j][$i] <= $self->{'max_val'}
+						&&  $data->[$j][$i] >= $self->{'min_val'}) {
+
+# calculate the point
+					$winkel = (180 - ($data->[$n][$i] % 360)) /360 * 2* Math::Trig::pi;
+
+					$x = ceil($centerX + sin ($winkel) * ($data->[$j][$i] - $mod) * $map);
+					$y = ceil($centerY + cos ($winkel) * ($data->[$j][$i] - $mod) * $map);
+
+					push @lines, [$x, $y];
+
+
+					if ($self->{'arrow'}) {
+						$self->{surface}->line( $color, $brush_size, $centerX, $centerY, $x, $y );
+#draw the arrow
+						if ($data->[$j][$i] > $self->{'min_val'}) {
+							$self->{surface}->point( $color, $brush_size*6, $x, $y, -$winkel + Math::Trig::pi, 'chevron' );
+						}
+					}
+
+# store the imagemap data if they asked for it
+					if ($self->{'imagemap'}) {
+						$self->{'imagemap_data'}->[$j][$i] = [$x, $y ];
+					}
+				} else {
+					if ($self->{'imagemap'}) {
+						$self->{'imagemap_data'}->[$j][$i] = [ undef(), undef() ];
+
+					}
+				}
+			}
+
+# draw the line
+			if ($self->{'line'}) {
+				$self->{surface}->polygon($color, $brush_size, \@lines);
+			}
+			my $shape = $self->{'pointStyle'.$j};
+			if (!$self->{arrow} && $shape) {
+				foreach my $p (@lines) {
+					$self->{surface}->point ($color, $brush_size*3, @$p, 0, $shape);
+				}
+			}
+			$n+=2;
+		}
+
+	}
+
+# now outline it  
+	$self->{'surface'}->rectangle ($misccolor,
+			$self->{line_size},
+			$self->{'curr_x_min'} ,
+			$self->{'curr_y_min'},
+			$self->{'curr_x_max'},
+			$self->{'curr_y_max'});
+
+	return;
+
 }
-
-
-
-sub _draw_right_legend {
-  my $self = shift;
-  my @labels = @{$self->{'legend_labels'}};
-  my ($x1, $x2, $x3, $y1, $y2, $width, $color, $misccolor, $w, $h, $brush);
-  my $font = $self->{'legend_font'};
- 
-  # make sure we're using a real font
-  unless ((ref ($font)) eq 'GD::Font') {
-    croak "The subtitle font you specified isn\'t a GD Font object";
-  }
-
-  # get the size of the font
-  ($h, $w) = ($font->height, $font->width);
-
-  # get the miscellaneous color
-  $misccolor = $self->_color_role_to_index('misc');
-
-  # find out how wide the largest label is
-  $width = (2 * $self->{'text_space'})
-    + ($self->{'max_legend_label'} * $w)
-    + $self->{'legend_example_size'}
-    + (2 * $self->{'legend_space'});
-
-  # get some starting x-y values
-  $x1 = $self->{'curr_x_max'} - $width;
-  $x2 = $self->{'curr_x_max'};
-  $y1 = $self->{'curr_y_min'} + $self->{'graph_border'} ;
-  
-  if ($self->{'pairs'}) {
-  $y2 = $self->{'curr_y_min'} + $self->{'graph_border'} + $self->{'text_space'}
-          + (($self->{'num_datasets'}/2) * ($h + $self->{'text_space'}))
-	  + (4 * $self->{'legend_space'});
-	  }
-  else {
-  $y2 = $self->{'curr_y_min'} + $self->{'graph_border'} + $self->{'text_space'}
-          + ($self->{'num_datasets'} * ($h + $self->{'text_space'}))
-	  + (2 * $self->{'legend_space'});
-	  }
-  # box the legend off
-  $self->{'gd_obj'}->rectangle ($x1, $y1, $x2, $y2, $misccolor);
-
-  # leave that nice space inside the legend box
-  $x1 += $self->{'legend_space'};
-  $y1 += $self->{'legend_space'} + $self->{'text_space'};
-
-  # now draw the actual legend
-  for (0..$#labels) {
-    # get the color
-    $color = $self->_color_role_to_index('dataset'.$_);
-   
-    # find the x-y coords
-    $x2 = $x1;
-    $x3 = $x2 + $self->{'legend_example_size'};
-    $y2 = $y1 + ($_ * ($self->{'text_space'} + $h)) + $h/2;
-
-    # do the line first
-    $self->{'gd_obj'}->line ($x2, $y2, $x3, $y2, $color);
-
-    # reset the brush for points
-    $brush = $self->_prepare_brush($color, 'point',
-				$self->{'pointStyle' . $_});
-    $self->{'gd_obj'}->setBrush($brush);
-    # draw the point
-    $self->{'gd_obj'}->line(int(($x3+$x2)/2), $y2,
-				int(($x3+$x2)/2), $y2, gdBrushed);
-
-    # now the label
-    $x2 = $x3 + (2 * $self->{'text_space'});
-    $y2 -= $h/2;
-    
-    $self->{'gd_obj'}->string ($font, $x2, $y2, $labels[$_], $color);
-   
-  }
-
-  # mark off the used space
-  $self->{'curr_x_max'} -= $width;
-
-  # and return
-  return 1;
-}
-
 
 sub _find_y_range {
   my $self = shift;
@@ -1137,7 +584,7 @@ sub _find_y_range {
   
   
   
-  if ($self->{'pairs'}) {
+  if (!$self->{'pairs'}) {
   for  $dataset ( @$data[1..$#$data] ) {
   # print "dataset @$dataset\n";
     for  $datum ( @$dataset ) {
@@ -1175,6 +622,14 @@ sub _find_y_range {
  }
 
  ($min, $max);
+}
+
+# we don't actually have a y_axes
+sub _draw_legend {
+	my $self = shift;
+
+	local $self->{y_axes};
+	return $self->SUPER::_draw_legend (@_);
 }
 
 ## be a good module and return 1

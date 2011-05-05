@@ -19,13 +19,10 @@
 
 package Chart::Pareto;
 
-use Chart::Base 2.3;
-use GD;
-use Carp;
+use Chart::Base;
+@ISA = qw(Chart::Base);
+$VERSION = $Chart::Base::VERSION;
 use strict;
-
-@Chart::Pareto::ISA = qw(Chart::Base);
-$Chart::Pareto::VERSION = '2.3';
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
@@ -48,7 +45,7 @@ sub _find_y_range {
       $sum += $data->[1][$i];
     }
     else {
-      carp "We need positiv data, if we want to draw a pareto graph!!";
+      Carp::carp "We need positiv data, if we want to draw a pareto graph!!";
       return 0;
     }
   }
@@ -92,7 +89,7 @@ sub _draw_legend {
   # warn them if not
   if (($#{$self->{'legend_labels'}} >= 0) &&
        ((scalar(@{$self->{'legend_labels'}})) != 2)) {
-    carp "I need two legend labels. One for the data and one for the sum.";
+    Carp::carp "I need two legend labels. One for the data and one for the sum.";
   }
 
   # init a field to store the length of the longest legend label
@@ -132,7 +129,7 @@ sub _draw_legend {
   elsif ($self->{'legend'} eq 'top') {
     $self->_draw_top_legend;
   } else {
-    carp "I can't put a legend there (at ".$self->{'legend'}.")\n";
+    Carp::carp "I can't put a legend there (at ".$self->{'legend'}.")\n";
   }
 
   #reload the number of datasets
@@ -147,24 +144,16 @@ sub _draw_legend {
 sub _draw_data {
   my $self = shift;
   my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
+  my $misccolor = $self->_color_role_to_rgb('misc');
   my ($x1, $x2, $x3, $y1, $y2, $y3, $y1_line, $y2_line, $x1_line, $x2_line, $h, $w);
   my ($width, $height, $delta1, $delta2, $map, $mod, $cut);
   my ($i, $j, $color, $line_color, $percent, $per_label, $per_label_len);
   my $sum = $self->{'sum'};
   my $curr_sum = 0;
-  my $font = $self->{'legend_font'};
-  my $pink = $self->{'gd_obj'}->colorAllocate(255,0,255);
+  my( $font, $fsize ) = $self->_font_role_to_font( 'legend' );
+  my $pink = $Chart::Base::NAMED_COLORS{'pink'};
   my $diff;
   
-  # make sure we're using a real font
-  unless ((ref ($font)) eq 'GD::Font') {
-    croak "The subtitle font you specified isn\'t a GD Font object";
-  }
-
-  # get the size of the font
-  ($h, $w) = ($font->height, $font->width);
-
   # init the imagemap data field if they wanted it
   if ($self->{'imagemap'}) {
     $self->{'imagemap_data'} = [];
@@ -194,8 +183,9 @@ sub _draw_data {
   $x1_line = $self->{'curr_x_min'};
 
   # draw the bars and the lines
-  $color = $self->_color_role_to_index('dataset0');
-  $line_color = $self->_color_role_to_index('dataset1');
+  $color = $self->_color_role_to_rgb('dataset0');
+  $line_color = $self->_color_role_to_rgb('dataset1');
+  my $line_size = $self->{line_size};
 
 
   # draw every bar for this dataset
@@ -233,17 +223,17 @@ sub _draw_data {
 	# draw the bar
 	## y2 and y3 are reversed in some cases because GD's fill
 	## algorithm is lame
-        $self->{'gd_obj'}->filledRectangle ($x2, $y3, $x3, $y2, $color);
+        $self->{'surface'}->filled_rectangle ($color, 0, $x2, $y3, $x3, $y2);
         if ($self->{'imagemap'}) {
 	    $self->{'imagemap_data'}->[1][$j] = [$x2, $y3, $x3, $y2];
         }
         # now outline it. outline red if the bar had been cut off
         unless ($cut){
-	  $self->{'gd_obj'}->rectangle ($x2, $y3, $x3, $y2, $misccolor);
+	  $self->{'surface'}->rectangle ($misccolor, $line_size, $x2, $y3, $x3, $y2);
         }
         else {
 
-          $self->{'gd_obj'}->rectangle ($x2, $y3, $x3, $y2, $pink);
+          $self->{'surface'}->rectangle ($pink, $line_size, $x2, $y3, $x3, $y2);
         }
         $x2_line = $x3;
         if ( $self->{'max_val'} >= $curr_sum) {
@@ -251,15 +241,14 @@ sub _draw_data {
           $y2_line = $y1 - (($curr_sum - $mod) * $map);
 
           #draw the line
-          $self->{'gd_obj'}->line ( $x1_line, $y1_line, $x2_line, $y2_line, $line_color);
+          $self->{'surface'}->line ( $line_color, $line_size, $x1_line, $y1_line, $x2_line, $y2_line);
           #draw a little rectangle at the end of the line
-          $self->{'gd_obj'}->filledRectangle($x2_line-2, $y2_line-2, $x2_line+2, $y2_line+2, $line_color);
+          $self->{'surface'}->filled_rectangle($line_color, 0, $x2_line-2, $y2_line-2, $x2_line+2, $y2_line+2);
 
           #draw the label for the percent value
           $per_label = $percent.'%';
-          $per_label_len = length ($per_label) * $w;
-          $self->{'gd_obj'}-> string ($font, $x2_line - $per_label_len -1, $y2_line - $h -1,
-                                      $per_label, $line_color);
+		  ($per_label_len, $h) = $self->{surface}->string_bounds($font, $fsize, $per_label);
+          $self->{'surface'}-> string ($line_color, $font, $fsize, $x2_line - $per_label_len -1, $y2_line - 1, 0, $per_label);
 
           #update the values for next the line
           $y1_line = $y2_line;
@@ -269,15 +258,14 @@ sub _draw_data {
           #get the y value
           $y2_line = $y1 - (($self->{'max_val'} - $mod) * $map) ;
           #draw the line
-          $self->{'gd_obj'}->line ( $x1_line, $y1_line, $x2_line, $y2_line, $pink);
+          $self->{'surface'}->line ( $pink, $line_size, $x1_line, $y1_line, $x2_line, $y2_line);
           #draw a little rectangle at the end of the line
-          $self->{'gd_obj'}->filledRectangle($x2_line-2, $y2_line-2, $x2_line+2, $y2_line+2, $pink);
+          $self->{'surface'}->filled_rectangle( $pink, 0, $x2_line-2, $y2_line-2, $x2_line+2, $y2_line+2);
 
           #draw the label for the percent value
           $per_label = $percent.'%';
-          $per_label_len = length ($per_label) * $w;
-          $self->{'gd_obj'}-> string ($font, $x2_line - $per_label_len -1, $y2_line - $h -1,
-                                  $per_label, $pink);
+		  ($per_label_len, $h) = $self->{surface}->string_bounds($font, $fsize, $per_label);
+          $self->{'surface'}-> string ($pink, $font, $fsize, $x2_line - $per_label_len -1, $y2_line - 1, 0, $per_label);
 
           #update the values for the next line
           $y1_line = $y2_line;
@@ -294,11 +282,10 @@ sub _draw_data {
 
       
   # and finaly box it off 
-  $self->{'gd_obj'}->rectangle ($self->{'curr_x_min'},
+  $self->{'surface'}->rectangle ($misccolor, $line_size, $self->{'curr_x_min'},
   				$self->{'curr_y_min'},
 				$self->{'curr_x_max'},
-				$self->{'curr_y_max'},
-				$misccolor);
+				$self->{'curr_y_max'});
   return;
 
 }

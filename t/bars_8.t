@@ -17,7 +17,6 @@ my @data1 =(  6626*$a,   -790*$a,  7580*$a,  7671*$a,  8764*$a,  8664*$a,  6343*
  
 #my @data1 =(6626,-790,7580,7671,8764,8664,6343,5518,6257,5391,5401,6002);
 
-
 $g->add_dataset(@data);
 $g->add_dataset(@data1);
  
@@ -34,11 +33,11 @@ $g->set(
           #  integer_ticks_only => 'true',
             legend             => 'none',
 	    png_border         => 4,
-            precision          => 28,
-	    skip_int_ticks     => 1.0e-27,
+#            precision          => 28,
+#	    skip_int_ticks     => 1.0e-27,
 	    text_space         => 3,
             title              => "Tickets",
-            title_font         => GD::Font->Giant,
+            title_font_size         => 16,
             transparent        => 'false',
             x_ticks            => 'vertical',
             y_axes             => 'both',

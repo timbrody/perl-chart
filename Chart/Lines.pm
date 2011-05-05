@@ -62,8 +62,8 @@ sub _draw_data {
   $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
   $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
 
-	# x-axis is discrete
-	if( $self->{'component'} )
+	# x-axis is always discrete for composite
+	if( $self->{'component'} || !$self->{xy_plot} )
 	{
 		my $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
 		$width -= $delta;
@@ -161,7 +161,7 @@ sub _draw_data {
 
 			# draw the marker
 			if( defined($shape) && $x3 > $marker_index ) {
-				$self->{'surface'}->point($color,$pt_size,$x3,$y3,$shape);
+				$self->{'surface'}->point($color,$pt_size,$x3,$y3,0,$shape);
 				$marker_index = $x3 + $marker_delta;
 			}
 		}

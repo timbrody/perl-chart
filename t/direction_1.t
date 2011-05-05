@@ -17,6 +17,7 @@ $g = Chart::Direction->new(500,500);
          'precision' => 0,
 	 'legend_labels' => \@labels,
 	 'legend' => 'bottom',
+	 'line_size' => -1,
          );
 
 $g->png("samples/direction_1.png");

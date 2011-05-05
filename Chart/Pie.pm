@@ -13,6 +13,7 @@ package Chart::Pie;
 
 use Chart::Base 3.0;
 use Math::Trig;
+use Chart::Bars; # legend example
 
 @ISA = qw(Chart::Base);
 $VERSION = $Chart::Base::VERSION;
@@ -39,6 +40,10 @@ sub _draw_legend
 	local $self->{'num_datasets'} = scalar @{$self->{'legend_labels'}};
 
 	$self->SUPER::_draw_legend();
+}
+
+sub _draw_legend_entry_example {
+	return shift->Chart::Bars::_draw_legend_entry_example( @_ );
 }
 
 # Override the ticks methods for the pie charts
@@ -253,10 +258,10 @@ sub _draw_data {
        $labelX -= $label_width;
     }
 
-    # Same thing if the label is above the chart. Don't go too low.
-    if($labelY < $centerY)
+    # label is below chart
+    if($labelY > $centerY)
     {
-       $labelY -= $label_height;
+       $labelY += $label_height;
     }
 
   # Shift the label in if it falls outside of the drawing area

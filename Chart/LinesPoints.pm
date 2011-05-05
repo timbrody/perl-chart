@@ -50,5 +50,12 @@ sub _init
 #  private methods go here  #
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
+sub _draw_data
+{
+	my( $self ) = @_;
+
+	$self->SUPER::_draw_data;
+}
+
 ## be a good module and return 1
 1;

@@ -87,6 +87,20 @@ sub _string_ops
 	return (\0, split /\0(.)/, $string);
 }
 
+sub _color_pattern
+{
+	my( $self, $color, $pattern ) = @_;
+
+	my $img = $pattern->get_surface;
+	my $w = $img->get_width;
+	my $h = $img->get_height;
+	my $surface = $self->new( 'png', $w, $h );
+	$surface->filled_rectangle( $color, 0, 0, 0, $w, $h );
+	$surface->filled_rectangle( $pattern, 0, 0, 0, $w, $h );
+
+	return $self->pattern_from_png( $surface->png );
+}
+
 =item $bytes = $r->render()
 
 Render and return the content of the surface as bytes.
@@ -149,6 +163,8 @@ sub filled_arc($$$$$$$$$)
 
 Draw a filled polygon along $points.
 
+$color may be a pattern.
+
 =cut
 
 sub filled_polygon($$$$)
@@ -191,18 +207,31 @@ sub line($$$$)
 	my( $self, $color, $thickness, $x, $y, $x2, $y2 ) = @_;
 }
 
-=item $r->point( $color, $size, $x, $y, $shape )
+=item $pattern = Chart::Render->pattern_from_png( $data [, %opts ] )
 
-Draw a point at $x,$y of $shape. Shape is one of circle, donut, triangle, upsidedownTriangle, square, hollowSquare or fatPlus.
+Create a new pattern from $data in PNG format.
+
+=cut
+
+sub pattern_from_png
+{
+	my( $class, $data, %opts ) = @_;
+
+	return $class->get_class->pattern_from_png( $data, %opts );
+}
+
+=item $r->point( $color, $size, $x, $y, $angle, $shape )
+
+Draw a point at $x,$y of $shape. Shape is one of circle, donut, triangle, upsidedownTriangle, square, hollowSquare, fatPlus or chevron.
 
 =cut
 
 sub point
 {
-	my( $self, $color, $size, $x, $y, $shape ) = @_;
+	my( $self, $color, $size, $x, $y, $angle, $shape ) = @_;
 
 	my $line_size = $size / 6;
-	$line_size = 1 if $line_size < 1.0;
+	$line_size = $line_size > 0 ? 1 : -1 if abs($line_size) < 1.0;
 
 	if( $shape eq "circle" )
 	{
@@ -216,19 +245,28 @@ sub point
 	}
 	elsif( $shape eq "square" )
 	{
-		my $x1 = $x - $size/2;
-		my $y1 = $y - $size/2;
-		my $x2 = $x + $size/2;
-		my $y2 = $y + $size/2;
-		$self->filled_rectangle( $color, 0, $x1, $y1, $x2, $y2 );
+		$size /= 2;
+		my @points = (
+			[$x - $size, $y - $size],
+			[$x + $size, $y - $size],
+			[$x + $size, $y + $size],
+			[$x - $size, $y + $size],
+		);
+		_rotate( $x, $y, $angle, \@points );
+		$self->filled_polygon( $color, 0, \@points );
 	}
 	elsif( $shape eq "hollowSquare" )
 	{
-		my $x1 = $x - $size/2 + $line_size/2;
-		my $y1 = $y - $size/2 + $line_size/2;
-		my $x2 = $x + $size/2 - $line_size/2;
-		my $y2 = $y + $size/2 - $line_size/2;
-		$self->rectangle( $color, $line_size, $x1, $y1, $x2, $y2 );
+		$size /= 2;
+		$size -= $line_size/2;
+		my @points = (
+			[$x - $size, $y - $size],
+			[$x + $size, $y - $size],
+			[$x + $size, $y + $size],
+			[$x - $size, $y + $size],
+		);
+		_rotate( $x, $y, $angle, \@points );
+		$self->polygon( $color, $line_size, \@points );
 	}
 	elsif( $shape eq "triangle" )
 	{
@@ -238,29 +276,55 @@ sub point
 			[$x - $size/2, $y + $size/2],
 			[$x + $size/2, $y + $size/2],
 		);
-
+		_rotate( $x, $y, $angle, \@points );
 		$self->filled_polygon( $color, -1, \@points );
 	}
 	elsif( $shape eq "upsidedownTriangle" )
 	{
-		$size -= $line_size/2;
-		my @points = (
-			[$x, $y + $size/2],
-			[$x + $size/2, $y - $size/2],
-			[$x - $size/2, $y - $size/2],
-		);
-
-		$self->filled_polygon( $color, -1, \@points );
+		return $self->point ($color, $size, $x, $y, $angle+pi, "triangle");
 	}
 	elsif( $shape eq "fatPlus" )
 	{
-		$self->line( $color, $line_size, $x, $y - $size/2, $x, $y + $size/2 );
-		$self->line( $color, $line_size, $x - $size/2, $y, $x + $size/2, $y );
+		$size /= 2;
+		my @points = (
+			[$x, $y - $size], [$x, $y + $size],
+			[$x - $size, $y], [$x + $size, $y],
+		);
+		_rotate ($x, $y, $angle, \@points);
+		$self->line( $color, $line_size, map { @$_ } @points[0,1] );
+		$self->line( $color, $line_size, map { @$_ } @points[2,3] );
+	}
+	elsif( $shape eq "chevron" )
+	{
+		$size /= 2;
+		my @points = (
+			[$x - $size, $y - $size], [$x, $y], [$x + $size, $y - $size],
+		);
+		_rotate ($x, $y, $angle, \@points);
+		$self->continuous( $color, $line_size, [ @points[0..2] ] );
 	}
 	else
 	{
 		Carp::croak "Unrecognised point shape '$shape'";
 	}
+}
+
+# utility method to rotate $points around the origin $x,$y by $angle radians
+sub _rotate
+{
+	my( $x, $y, $angle, $points ) = @_;
+
+	for(@$points) {
+		$_->[0] -= $x;
+		$_->[1] -= $y;
+		my( $dx, $dy ) = @$_;
+		$_->[0] = $dx*cos($angle) - $dy*sin($angle);
+		$_->[1] = $dx*sin($angle) + $dy*cos($angle);
+		$_->[0] += $x;
+		$_->[1] += $y;
+	}
+
+	return $points;
 }
 
 =item $r->polygon( $color, $thickness, $points )

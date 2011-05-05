@@ -36,6 +36,7 @@ package Chart::Mountain;
 
 use Chart::Base 3.0;
 use Chart::Lines;
+use Chart::Bars; # legend example
 
 @ISA = qw( Chart::Lines );
 $VERSION = $Chart::Base::VERSION;
@@ -65,6 +66,10 @@ use strict;
 #===================#
 #  private methods  #
 #===================#
+
+sub _draw_legend_entry_example {
+	return shift->Chart::Bars::_draw_legend_entry_example( @_ );
+}
 
 sub _find_y_range {
     my $self = shift;
@@ -112,6 +117,7 @@ sub _draw_data {
   my ($i, $j, $color, $brush, $zero_offset);
   my $brush_size = $self->{'brush_size'};
   my $pt_size = $self->{'pt_size'};
+  my $line_size = $self->{line_size};
 
   # init the imagemap data field if they asked for it
   if ($self->{'imagemap'}) {
@@ -119,10 +125,21 @@ sub _draw_data {
   }
   my @xy; # the xy translation of all data points
 
-  # find the delta value between data points, as well
-  # as the mapping constant
   $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
   $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+
+    $x1 = $self->{'curr_x_min'};
+
+	# x-axis is always discrete for composite
+	if( $self->{'component'} || !$self->{xy_plot} )
+	{
+		my $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
+		$width -= $delta;
+		$x1 += $delta/2;
+	}
+
+  # find the delta value between data points, as well
+  # as the mapping constant
   $delta = $width / ($self->{'num_datapoints'} > 1 ? $self->{'num_datapoints'}-1 : 1);
   $map = $height / ($self->{'max_val'} - $self->{'min_val'});
 
@@ -142,12 +159,6 @@ sub _draw_data {
   }
   
   # get the base x-y values
-  if ($self->{'xy_plot'}) {
-    $x1 = $self->{'curr_x_min'};
-  }
-  else {
-    $x1 = $self->{'curr_x_min'};
-  }
   if ($self->{'min_val'} >= 0 ) {
     $y1 = $self->{'curr_y_max'};
     $mod = $self->{'min_val'};
@@ -186,12 +197,14 @@ sub _draw_data {
 				$y_values[$_][$j] = undef for (1..$self->{'num_datasets'});
 				last;
 			}
-			$y_values[$i][$j] += $data->[$_][$j] for (1..$i);
+			$y_values[$i][$j] += $data->[$_][$j] for ($i..$self->{num_datasets});
 		}
 	}
 
+	my @lines;
+
 	# draw the lines
-	for $i (reverse 1..$self->{'num_datasets'}) {
+	for $i (1..$self->{'num_datasets'}) {
 		# get the color for this dataset, and set the brush
 		$color = $self->_color_role_to_rgb('dataset'.($i-1));
 
@@ -208,9 +221,7 @@ sub _draw_data {
 			{
 				if( scalar(@line) > 1 )
 				{
-					unshift @line, [$line[0]->[0], $y1];
-					push @line, [$line[$#line]->[0], $y1];
-					$self->{'surface'}->filled_polygon($color,$brush_size,\@line);
+					push @{$lines[$i-1]}, [@line];
 				}
 				@line = ();
 				push @{$xy[$i]}, [undef,undef];
@@ -244,11 +255,29 @@ sub _draw_data {
 		}
 		if( @line > 1 )
 		{
-			unshift @line, [$line[0]->[0], $y1];
-			push @line, [$line[$#line]->[0], $y1];
-			$self->{'surface'}->filled_polygon($color,$brush_size,\@line);
+			push @{$lines[$i-1]}, [@line];
 		}
 		@line = ();
+	}
+
+	# add the line across the bottom of the graph (zero)
+	push @lines, [];
+	for(my $j = 0; $j < @{$lines[0]}; ++$j) {
+		push @{$lines[$#lines]}, [
+			[ $lines[0][$j][0][0], $y1 ],
+			[ $lines[0][$j][$#{$lines[0][$j]}][0], $y1 ],
+		];
+	}
+	# this renders just the part of the graph occupied by each dataset,
+	# otherwise blending colors would get stacked on top of each other
+	for(my $i = 0; $i < $#lines; ++$i) {
+		$color = $self->_color_role_to_rgb('dataset'.($i));
+		for(my $j = 0; $j < @{$lines[$i]}; ++$j) {
+			$self->{'surface'}->filled_polygon($color,0,[
+				@{$lines[$i][$j]},
+				reverse @{$lines[$i+1][$j]},
+			]);
+		}
 	}
 
 	if( $self->{'imagemap'} ) {
@@ -262,7 +291,7 @@ sub _draw_data {
 	{
 		$self->{'surface'}->rectangle(
 				$misccolor,
-				1,
+				$line_size,
 				$self->{'curr_x_min'}, $self->{'curr_y_min'},
 				$self->{'curr_x_max'}, $self->{'curr_y_max'});
 	}

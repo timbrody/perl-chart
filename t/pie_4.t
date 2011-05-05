@@ -1,7 +1,6 @@
 #!/usr/bin/perl -w
 
 use Chart::Pie;
-use GD;
 use strict;
 
 print "1..1\n";
@@ -17,8 +16,8 @@ $g->set ('legend_label_values' => 'value');
 $g->set ('legend' => 'bottom');
 $g->set ('grey_background' => 'false');
 $g->set ('x_label' => '');
-$g->set ('legend_font' => gdSmallFont);
-$g->set ('title_font' => gdGiantFont);
+$g->set ('legend_font_size' => 9);
+$g->set ('title_font_size' => 16);
          
 $g->png ("samples/pie_4.png");
 print "ok 1\n";

@@ -44,7 +44,6 @@ sub _draw_x_ticks {
  my $misccolor = $self->_color_role_to_rgb('misc');
  my ($h, $w, $x1, $y1, ,$y2, $x2, $delta, $width, $label);
  my @labels = @{$self->{'y_tick_labels'}};
-print STDERR "labels=@labels\n";
   my $line_size = $self->{'line_size'};
 
  $self->{'grid_data'}->{'x'} = [];
@@ -85,22 +84,21 @@ print STDERR "labels=@labels\n";
    for (0..$#labels){
 		$label = $self->{'y_tick_labels'}[$_];
 		$x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2 ;
-print STDERR "$x2,$y2,'$label'\n";
 		$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
    }
  }
  elsif ($self->{'x_ticks'} =~ /^staggered/i ) {  #staggered ticks
    #get the point for updating later
-   $y1 = $self->{'curr_y_max'} - 3*$self->{'text_space'} - 2*$h - $self->{'tick_len'};
+   $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - 2*$h - $self->{'tick_len'};
 
    for (0..$#labels) {
    $label = $self->{'y_tick_labels'}[$_];
      $x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2;
      unless ($_%2) {
-		$y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'};
+		$y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'} + $h;
      }
      else {
-		$y2 = $y1  + $h + 2*$self->{'text_space'} + $self->{'tick_len'};
+		$y2 = $y1  + 2*$h + 2*$self->{'text_space'} + $self->{'tick_len'};
      }
 	$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
    }

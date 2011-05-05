@@ -19,16 +19,12 @@
 
 package Chart::ErrorBars;
 
-use Chart::Base 2.4;
-use GD;
-use Carp;
+use Chart::Base;
+
+@ISA = qw( Chart::Base );
+$VERSION = $Chart::Base::VERSION;
+
 use strict;
-
-@Chart::ErrorBars::ISA = qw(Chart::Base);
-$Chart::ErrorBars::VERSION = '2.4';
-
-use constant TRUE => 1;
-use constant FALSE => 0;
 
 #>>>>>>>>>>>>>>>>>>>>>>>>>>#
 #  public methods go here  #
@@ -42,232 +38,181 @@ use constant FALSE => 0;
 
 ## finally get around to plotting the data
 sub _draw_data {
-  my $self = shift;
-  my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_index('misc');
-  my ($x1, $x2, $x3, $y1, $y2, $y3, $mod, $y_error_up, $y_error_down);
-  my ($width, $height, $delta, $map, $delta_num, $zero_offset, $flag);
-  my ($i, $j, $color, $brush);
-  my $dataset =0;
-  my $diff;
-  
-  # init the imagemap data field if they want it
-  if ($self->{'imagemap'}) {
-    $self->{'imagemap_data'} = [];
-  }
+	my $self = shift;
+	my $data = $self->{'dataref'};
+	my $misccolor = $self->_color_role_to_rgb('misc');
+	my ($x1, $x2, $x3, $y1, $y2, $y3, $mod, $y_error_up, $y_error_down);
+	my ($width, $height, $delta, $map, $delta_num, $zero_offset, $flag);
+	my ($i, $j, $color, $brush);
+	my $dataset =0;
+	my $diff;
 
-  # find the delta value between data points, as well
-  # as the mapping constant
-  $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
-  $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-  $delta = $width / ( $self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-  $diff = $self->{'max_val'} - $self->{'min_val'};
-  $diff = 1 if $diff == 0;
-  $map = $height / $diff;
+	my $brush_size = $self->{brush_size};
 
-  #for a xy-plot, use this delta and maybe an offset for the zero-axes
-  if ($self->{'xy_plot'}) {
-    $diff = $self->{'x_max_val'} - $self->{'x_min_val'};
-    $diff = 1 if $diff == 0;
-    $delta_num = $width / $diff;
+# init the imagemap data field if they want it
+	if ($self->{'imagemap'}) {
+		$self->{'imagemap_data'} = [];
+	}
 
-    if ($self->{'x_min_val'} <= 0 && $self->{'x_max_val'} >= 0) {
-       $zero_offset = abs($self->{'x_min_val'}) * abs($delta_num);
-    }
-    elsif ($self->{'x_min_val'} > 0 || $self->{'x_max_val'} < 0) {
-       $zero_offset =  -$self->{'x_min_val'} * $delta_num;
-    }
-    else {
-       $zero_offset = 0;
-    }
-  }
-  
-  # get the base x-y values
-  if (!$self->{'xy_plot'}) {
-    $x1 = $self->{'curr_x_min'} + ($delta / 2);
-  }
-  else {
-    $x1 = $self->{'curr_x_min'};
-  }
-  if ($self->{'min_val'} >= 0) {
-    $y1 = $self->{'curr_y_max'};
-    $mod = $self->{'min_val'};
-  }
-  elsif ($self->{'max_val'} <= 0) {
-    $y1 = $self->{'curr_y_min'};
-    $mod = $self->{'max_val'};
-  }
-  else {
-    $y1 = $self->{'curr_y_min'} + ($map * $self->{'max_val'});
-    $mod = 0;
-    $self->{'gd_obj'}->line ($self->{'curr_x_min'}, $y1,
-                             $self->{'curr_x_max'}, $y1,
-                             $misccolor);
-  }
+# find the delta value between data points, as well
+# as the mapping constant
+	$width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
+	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+	$delta = $width / ( $self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
+	$diff = $self->{'max_val'} - $self->{'min_val'};
+	$diff = 1 if $diff == 0;
+	$map = $height / $diff;
 
-  # first of all box it off
-  $self->{'gd_obj'}->rectangle ($self->{'curr_x_min'},
-  				$self->{'curr_y_min'},
-				$self->{'curr_x_max'},
-				$self->{'curr_y_max'},
-				$misccolor);
-  
-  # draw the points
-  for $i (1..$self->{'num_datasets'}) {
-    if (!$self->{'same_error'}) {
-     # get the color for this dataset, and set the brush
-     $color = $self->_color_role_to_index('dataset'.($dataset));     # draw every point for this dataset
-     $dataset++ if (($i-1)%3 == 0);
-     for $j (0..$self->{'num_datapoints'}) {
-      #get the brush for points
-      $brush = $self->_prepare_brush ($color, 'point');
-      $self->{'gd_obj'}->setBrush ($brush);
-      
-      # only draw if the current set is really a dataset and no errorset
-      if ( ($i-1)%3 == 0) {
-       # don't try to draw anything if there's no data
-       if (defined ($data->[$i][$j])  ) {
-          if ($self->{'xy_plot'}) {
-           $x2 = $x1 + $delta_num * $data->[0][$j] + $zero_offset+1;
-           $x3 = $x2 ;
-          }
-          else {
-           $x2 = $x1 + ($delta * $j)+1;
-           $x3 = $x2;
-          }
-	  $y2 = $y1 - (($data->[$i][$j] - $mod) * $map);
-	  $y3 = $y2;
-          $y_error_up = $y2-abs($data->[$i+1][$j]) *$map;
-          $y_error_down= $y2+abs($data->[$i+2][$j]) *$map;
+#for a xy-plot, use this delta and maybe an offset for the zero-axes
+	if ($self->{'xy_plot'}) {
+		$diff = $self->{'x_max_val'} - $self->{'x_min_val'};
+		$diff = 1 if $diff == 0;
+		$delta_num = $width / $diff;
 
-	# draw the point only if it is within the chart borders
-          if ($data->[$i][$j] <= $self->{'max_val'} && $data->[$i][$j] >= $self->{'min_val'}) {
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y3, gdBrushed);
-            $flag = TRUE;
-          }
+		if ($self->{'x_min_val'} <= 0 && $self->{'x_max_val'} >= 0) {
+			$zero_offset = abs($self->{'x_min_val'}) * abs($delta_num);
+		}
+		elsif ($self->{'x_min_val'} > 0 || $self->{'x_max_val'} < 0) {
+			$zero_offset =  -$self->{'x_min_val'} * $delta_num;
+		}
+		else {
+			$zero_offset = 0;
+		}
+	}
 
-          #reset the brush for lines
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
-        
-          #draw the error bars
-          if ($flag) {
+# get the base x-y values
+	if (!$self->{'xy_plot'}) {
+		$x1 = $self->{'curr_x_min'} + ($delta / 2);
+	}
+	else {
+		$x1 = $self->{'curr_x_min'};
+	}
+	if ($self->{'min_val'} >= 0) {
+		$y1 = $self->{'curr_y_max'};
+		$mod = $self->{'min_val'};
+	}
+	elsif ($self->{'max_val'} <= 0) {
+		$y1 = $self->{'curr_y_min'};
+		$mod = $self->{'max_val'};
+	}
+	else {
+		$y1 = $self->{'curr_y_min'} + ($map * $self->{'max_val'});
+		$mod = 0;
+		$self->{'surface'}->line ($misccolor, $self->{line_size}, 
+				$self->{'curr_x_min'}, $y1,
+				$self->{'curr_x_max'}, $y1);
+	}
 
-            # the upper lines
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y_error_up, gdBrushed);
-            $self->{'gd_obj'}->line($x2-3, $y_error_up, $x3+3, $y_error_up, gdBrushed);
+# first of all box it off
+	$self->{'surface'}->rectangle ($misccolor, $self->{line_size},
+			$self->{'curr_x_min'},
+			$self->{'curr_y_min'},
+			$self->{'curr_x_max'},
+			$self->{'curr_y_max'});
 
-            # the down lines
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y_error_down, gdBrushed);
-            $self->{'gd_obj'}->line($x2-3, $y_error_down, $x3+3, $y_error_down, gdBrushed);
-            $flag = FALSE;
-          }
-	  # store the imagemap data if they asked for it
-	  if ($self->{'imagemap'}) {
-	    $self->{'imagemap_data'}->[$i][$j] = [ $x2, $y2 ];
-	  }
-        }
-      }
-     }
-    }
-    else {
-     # get the color for this dataset, and set the brush
-     $color = $self->_color_role_to_index('dataset'.($dataset));     # draw every point for this dataset
-     $dataset++ if (($i-1)%2 == 0);
-     for $j (0..$self->{'num_datapoints'}) {
-      #get the brush for points
-      $brush = $self->_prepare_brush ($color, 'point');
-      $self->{'gd_obj'}->setBrush ($brush);
+# draw the points
+	for $i (1..$self->{'num_datasets'}) {
+		$color = $self->_color_role_to_rgb('dataset'.($dataset));     # draw every point for this dataset
+		my $shape = 'circle';
+		if (!$self->{'same_error'}) {
+# get the color for this dataset, and set the brush
+				$dataset++ if (($i-1)%3 == 0);
+			for $j (0..$self->{'num_datapoints'}) {
 
-      # only draw if the current set is really a dataset and no errorset
-      if ( ($i-1)%2 == 0) {
-       # don't try to draw anything if there's no data
-       if (defined ($data->[$i][$j])  ) {
-          if ($self->{'xy_plot'}) {
-           $x2 = $x1 + $delta_num * $data->[0][$j] + $zero_offset;
-           $x3 = $x2 ;
-          }
-          else {
-           $x2 = $x1 + ($delta * $j);
-           $x3 = $x2;
-          }
-	  $y2 = $y1 - (($data->[$i][$j] - $mod) * $map);
-	  $y3 = $y2;
-          $y_error_up = $y2-abs($data->[$i+1][$j]) *$map;
-          $y_error_down= $y2+abs($data->[$i+1][$j]) *$map;
+# only draw if the current set is really a dataset and no errorset
+				if ( ($i-1)%3 == 0) {
+# don't try to draw anything if there's no data
+					if (defined ($data->[$i][$j])  ) {
+						if ($self->{'xy_plot'}) {
+							$x2 = $x1 + $delta_num * $data->[0][$j] + $zero_offset+1;
+							$x3 = $x2 ;
+						}
+						else {
+							$x2 = $x1 + ($delta * $j)+1;
+							$x3 = $x2;
+						}
+						$y2 = $y1 - (($data->[$i][$j] - $mod) * $map);
+						$y3 = $y2;
+						$y_error_up = $y2-abs($data->[$i+1][$j]) *$map;
+						$y_error_down= $y2+abs($data->[$i+2][$j]) *$map;
 
-	  # draw the point only if it is within the chart borders
-          if ($data->[$i][$j] <= $self->{'max_val'} && $data->[$i][$j] >= $self->{'min_val'}) {
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y3, gdBrushed);
-            $flag = TRUE;
-          }
+# draw the point only if it is within the chart borders
+						if ($data->[$i][$j] <= $self->{'max_val'} && $data->[$i][$j] >= $self->{'min_val'}) {
+							$self->{'surface'}->point( $color, $brush_size*3, $x2, $y2, 0, $shape );
+							$flag = TRUE;
+						}
 
-          #reset the brush for lines
-          $brush = $self->_prepare_brush ($color, 'line');
-          $self->{'gd_obj'}->setBrush ($brush);
+#draw the error bars
+						if ($flag) {
 
-          #draw the error bars
-          if ($flag) {
+# the upper lines
+							$self->{'surface'}->line($color, $brush_size, $x2, $y2, $x3, $y_error_up);
+							$self->{'surface'}->line($color, $brush_size, $x2-3, $y_error_up, $x3+3, $y_error_up);
 
-            # the upper lines
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y_error_up, gdBrushed);
-            $self->{'gd_obj'}->line($x2-3, $y_error_up, $x3+3, $y_error_up, gdBrushed);
+# the down lines
+							$self->{'surface'}->line($color, $brush_size, $x2, $y2, $x3, $y_error_down);
+							$self->{'surface'}->line($color, $brush_size, $x2-3, $y_error_down, $x3+3, $y_error_down);
+							$flag = FALSE;
+						}
+# store the imagemap data if they asked for it
+						if ($self->{'imagemap'}) {
+							$self->{'imagemap_data'}->[$i][$j] = [ $x2, $y2 ];
+						}
+					}
+				}
+			}
+		}
+		else {
+				$dataset++ if (($i-1)%2 == 0);
+			for $j (0..$self->{'num_datapoints'}) {
 
-            # the down lines
-            $self->{'gd_obj'}->line($x2, $y2, $x3, $y_error_down, gdBrushed);
-            $self->{'gd_obj'}->line($x2-3, $y_error_down, $x3+3, $y_error_down, gdBrushed);
-            $flag = FALSE;
-          }
-	  # store the imagemap data if they asked for it
-	  if ($self->{'imagemap'}) {
-	    $self->{'imagemap_data'}->[$i][$j] = [ $x2, $y2 ];
-	  }
-       }
-      }
-     }
-    }
-  }
+# only draw if the current set is really a dataset and no errorset
+				if ( ($i-1)%2 == 0) {
+# don't try to draw anything if there's no data
+					if (defined ($data->[$i][$j])  ) {
+						if ($self->{'xy_plot'}) {
+							$x2 = $x1 + $delta_num * $data->[0][$j] + $zero_offset;
+							$x3 = $x2 ;
+						}
+						else {
+							$x2 = $x1 + ($delta * $j);
+							$x3 = $x2;
+						}
+						$y2 = $y1 - (($data->[$i][$j] - $mod) * $map);
+						$y3 = $y2;
+						$y_error_up = $y2-abs($data->[$i+1][$j]) *$map;
+						$y_error_down= $y2+abs($data->[$i+1][$j]) *$map;
 
-  return 1;
+# draw the point only if it is within the chart borders
+						if ($data->[$i][$j] <= $self->{'max_val'} && $data->[$i][$j] >= $self->{'min_val'}) {
+							$self->{'surface'}->point($color, $brush_size*3, $x2, $y2, 0, $shape);
+							$flag = TRUE;
+						}
+
+#draw the error bars
+						if ($flag) {
+
+# the upper lines
+							$self->{'surface'}->line($color, $brush_size, $x2, $y2, $x3, $y_error_up);
+							$self->{'surface'}->line($color, $brush_size, $x2-3, $y_error_up, $x3+3, $y_error_up);
+
+# the down lines
+							$self->{'surface'}->line($color, $brush_size, $x2, $y2, $x3, $y_error_down);
+							$self->{'surface'}->line($color, $brush_size, $x2-3, $y_error_down, $x3+3, $y_error_down);
+							$flag = FALSE;
+						}
+# store the imagemap data if they asked for it
+						if ($self->{'imagemap'}) {
+							$self->{'imagemap_data'}->[$i][$j] = [ $x2, $y2 ];
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return 1;
 }
-
-
-##  set the gdBrush object to trick GD into drawing fat lines
-sub _prepare_brush {
-  my $self = shift;
-  my $color = shift;
-  my $type = shift;
-  my ($radius, @rgb, $brush, $white, $newcolor);
-
-  # get the rgb values for the desired color
-  @rgb = $self->{'gd_obj'}->rgb($color);
-
-  # get the appropriate brush size
-  if ($type eq 'line') {
-    $radius = $self->{'brush_size'}/2;
-  }
-  elsif ($type eq 'point') {
-    $radius = $self->{'pt_size'}/2;
-  }
-
-  # create the new image
-  $brush = GD::Image->new ($radius*2, $radius*2);
-
-  # get the colors, make the background transparent
-  $white = $brush->colorAllocate (255,255,255);
-  $newcolor = $brush->colorAllocate (@rgb);
-  $brush->transparent ($white);
-
-  # draw the circle
-  $brush->arc ($radius-1, $radius-1, $radius, $radius, 0, 360, $newcolor);
-
-  # fill it if we're using lines
-  $brush->fill ($radius-1, $radius-1, $newcolor);
-
-  # set the new image as the main object's brush
-  return $brush;
-}
-
 
 ##  let them know what all the pretty colors mean
 sub _draw_legend {
@@ -318,7 +263,7 @@ sub _draw_legend {
   # check to see if they have as many labels as datasets,
   # warn them if not
   if ( ($post_length > 0) && ($post_length != $j) ) {
-    carp "The number of legend labels and datasets doesn\'t match";
+    Carp::carp "The number of legend labels and datasets doesn\'t match";
   }
   
   # different legend types
@@ -334,7 +279,7 @@ sub _draw_legend {
   elsif ($self->{'legend'} eq 'top') {
     $self->_draw_top_legend;
   } else {
-    carp "I can't put a legend there (at ".$self->{'legend'}.")\n";
+    Carp::carp "I can't put a legend there (at ".$self->{'legend'}.")\n";
   }
 
   #reset the number of dataset to make sure that everything goes right
