@@ -338,9 +338,12 @@ sub filled_rectangle($$$$$$$)
 {
 	my( $self, $color, $thickness, $x, $y, $x2, $y2 ) = @_;
 
-	my $t;
-	$t = $x, $x = $x2, $x2 = $t if $x2 < $x;
-	$t = $y, $y = $y2, $y2 = $t if $y2 < $y;
+	# we need origins + width + height
+	($x, $x2) = ($x2, $x) if $x2 < $x;
+	($y, $y2) = ($y2, $y) if $y2 < $y;
+
+	# fill to pixel boundaries
+	$thickness = 1 if !$thickness;
 
 	my $ops = [];
 	push @$ops,
@@ -472,9 +475,9 @@ sub rectangle($$$$$$$)
 {
 	my( $self, $color, $thickness, $x, $y, $x2, $y2 ) = @_;
 
-	my $t;
-	$t = $x, $x = $x2, $x2 = $t if $x2 < $x;
-	$t = $y, $y = $y2, $y2 = $t if $y2 < $y;
+	# we need origins + width + height
+	($x, $x2) = ($x2, $x) if $x2 < $x;
+	($y, $y2) = ($y2, $y) if $y2 < $y;
 
 	my $ops = [];
 	push @$ops,

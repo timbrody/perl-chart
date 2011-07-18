@@ -19,6 +19,7 @@
 
 package Chart::HorizontalBars;
 
+use Chart::Base;
 use Chart::Bars 3.0;
 use Carp;
 
@@ -37,276 +38,43 @@ use strict;
 #<<<<<<<<<<<<<<<<<<<<<<<<<<<#
 
 sub _draw_x_ticks {
- my $self = shift;
- my $data = $self->{'dataref'};
-	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
- my $textcolor = $self->_color_role_to_rgb('text');
- my $misccolor = $self->_color_role_to_rgb('misc');
- my ($h, $w, $x1, $y1, ,$y2, $x2, $delta, $width, $label);
- my @labels = @{$self->{'y_tick_labels'}};
-  my $line_size = $self->{'line_size'};
+	my $self = shift;
+	my $data = $self->{'dataref'};
 
- $self->{'grid_data'}->{'x'} = [];
- 
- #get height and width of the font
- #($h, $w) = ($font->height, $font->width);
- $h = $self->{'x_tick_label_height'};
- 
- #get the right x-value and width
- if ( $self->{'y_axes'} =~ /^right$/i ){
-  $x1 = $self->{'curr_x_min'};
-  $width = $self->{'curr_x_max'} - $x1 -$self->{'tick_len'} - $self->{'text_space'}
-           - $self->{'x_tick_label_width'};
- }
- elsif ( $self->{'y_axes'} =~ /^both$/i) {
-  $x1 = $self->{'curr_x_min'} + $self->{'text_space'} + $self->{'x_tick_label_width'}
-        + $self->{'tick_len'};
-  $width = $self->{'curr_x_max'} - $x1 - $self->{'tick_len'} - $self->{'text_space'}
-           - $self->{'x_tick_label_width'};
- }
- else {
-  $x1 = $self->{'curr_x_min'} + $self->{'text_space'} + $self->{'x_tick_label_width'}
-        + $self->{'tick_len'};
-  $width = $self->{'curr_x_max'} - $x1;
- }
+	my @labels = @{$self->{'y_tick_labels'}};
 
- #get the delta value
- $delta = $width / ($self->{'y_ticks'} -1) ;
+	local $self->{dataref}->[0] = \@labels;
+	local $self->{num_datapoints} = @labels;
+	local $self->{xy_plot} = TRUE; # line up start/end
+	local( $self->{x_tick_label_width}, $self->{y_tick_label_width} )
+	   = ( $self->{y_tick_label_width}, $self->{x_tick_label_width} );
+	local( $self->{x_tick_label_height}, $self->{y_tick_label_height} )
+	   = ( $self->{y_tick_label_height}, $self->{x_tick_label_height} );
 
- #draw the labels
- $y2 =$y1;
- 
- if ($self->{'x_ticks'} =~ /^normal/i ) {  #just normal ticks
-   #get the point for updating later
-   $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} -$h - $self->{'tick_len'};
-   #get the start point
-   $y2 = $y1  + $self->{'tick_len'} + $self->{'text_space'} + $h;
-   for (0..$#labels){
-		$label = $self->{'y_tick_labels'}[$_];
-		$x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2 ;
-		$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
-   }
- }
- elsif ($self->{'x_ticks'} =~ /^staggered/i ) {  #staggered ticks
-   #get the point for updating later
-   $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - 2*$h - $self->{'tick_len'};
-
-   for (0..$#labels) {
-   $label = $self->{'y_tick_labels'}[$_];
-     $x2 = $x1 + ($delta * $_) - $self->string_width($font,$fsize,$label)/2;
-     unless ($_%2) {
-		$y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'} + $h;
-     }
-     else {
-		$y2 = $y1  + 2*$h + 2*$self->{'text_space'} + $self->{'tick_len'};
-     }
-	$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
-   }
-
- }
-
- elsif ($self->{'x_ticks'} =~ /^vertical/i ) {  #vertical ticks
-   #get the point for updating later
-   $y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - $self->{'y_tick_label_width'} - $self->{'tick_len'};
-
-
-   for (0..$#labels){
-     $label = $self->{'y_tick_labels'}[$_];
-     #get the start point
-     $y2 = $y1  + $self->{'tick_len'} + $self->string_width($font,$fsize,$label) + $self->{'text_space'};
-
-     $x2 = $x1 + ($delta * $_) - ($h /2);
-     $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, Chart::Base::ANGLE_VERTICAL, $label);
-   }
-
- }
- 
- else {
-  carp "I don't understand the type of x-ticks you specified";
- }
- #update the curr x and y max value
- $self->{'curr_y_max'} = $y1;
- $self->{'curr_x_max'} = $x1 + $width;
- 
- #draw the ticks
- $y1 =$self->{'curr_y_max'};
- $y2 =$self->{'curr_y_max'} + $self->{'tick_len'};
- for(0..$#labels ) {
-   $x2 = $x1 + ($delta * $_);
-   $self->{'surface'}->line($misccolor, $line_size, $x2, $y1, $x2, $y2);
-     if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
-        $self->{'grid_data'}->{'x'}->[$_] = $x2;
-     }
- }
- 
- return 1;
+	$self->SUPER::_draw_x_ticks;
 }
 
 sub _draw_y_ticks {
-  my $self = shift;
-  my $side = shift || 'left';
-  my $data = $self->{'dataref'};
-	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
-  my $textcolor = $self->_color_role_to_rgb ('text');
-  my $misccolor = $self->_color_role_to_rgb ('misc');
-  my ($h, $x1, $x2,  $y1, $y2);
-  my ($width, $height, $delta);
-  my $line_size = $self->{'line_size'};
+	my( $self, $side ) = @_;
+	my $data = $self->{dataref};
 
-  $self->{'grid_data'}->{'y'} =[];
-  
-  #get the size of the font
-  #($h, $w) = ($font->height, $font->width);
-  $h = $self->{'y_tick_label_height'};
+	my $height = $self->{curr_y_max} - $self->{curr_y_min};
+	my @labels = @{$data->[0]};
+	my $delta = $height / @labels;
 
-  #figure out, where to draw
-  if ($side =~ /^right$/i) {
-    #get the right startposition
-    $x1 = $self->{'curr_x_max'};
-    $y1 = $self->{'curr_y_max'} - $h/2;
-    
-    #get the delta values
-    $height =  $self->{'curr_y_max'} - $self->{'curr_y_min'} ;
-    $delta = ($height) / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-    $y1 -= ($delta/2 );
+	local $self->{curr_y_max} = $self->{curr_y_max} - $delta/2;
+	local $self->{curr_y_min} = $self->{curr_y_min} + $delta/2;
 
-    #look if skipping is desired
-    if (!defined($self->{'skip_y_ticks'})) {
-       $self->{'skip_y_ticks'} =1;
-    }
-    
-    #draw the labels
-    for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
-       $x2 = $x1 + $self->{'tick_len'} + $self->{'text_space'};
-       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
-                              $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
-    }
-    
-    #draw the ticks
-    $x1 = $self->{'curr_x_max'};
-    $x2 = $self->{'curr_x_max'} + $self->{'tick_len'};
-    $y1 += $h/2;
-    for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
-           $y2 = $y1 - ($delta * $_);
-           $self->{'surface'}->line($misccolor, $line_size, $x1,$y2,$x2,$y2);
-           if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
-              $self->{'grid_data'}->{'y'}->[$_] = $y2;
-           }
-    }
-    
-  }
-  elsif ($side =~ /^both$/i) {
-    #get the right startposition
-    $x1 = $self->{'curr_x_max'};
-    $y1 = $self->{'curr_y_max'} - $h/2;
+	local $self->{min_val} = 0;
+	local $self->{max_val} = @labels;
+	local $self->{y_tick_labels} = \@labels;
+	local $self->{y_ticks} = @labels;
+	local( $self->{x_tick_label_width}, $self->{y_tick_label_width} )
+	   = ( $self->{y_tick_label_width}, $self->{x_tick_label_width} );
+	local( $self->{x_tick_label_height}, $self->{y_tick_label_height} )
+	   = ( $self->{y_tick_label_height}, $self->{x_tick_label_height} );
 
-    #get the delta values
-    $height =  $self->{'curr_y_max'} - $self->{'curr_y_min'} ;
-    $delta = ($height) / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-    $y1 -= ($delta/2 );
-
-    #look if skipping is desired
-    if (!defined($self->{'skip_y_ticks'})) {
-       $self->{'skip_y_ticks'} =1;
-    }
-
-    #first draw the right labels
-    for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
-       $x2 = $x1 + $self->{'tick_len'} + $self->{'text_space'};
-       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
-                              $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
-    }
-
-    #then draw the right ticks
-    $x1 = $self->{'curr_x_max'};
-    $x2 = $self->{'curr_x_max'} + $self->{'tick_len'};
-    $y1 += $h/2;
-    for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
-           $y2 = $y1 - ($delta * $_);
-           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
-           if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
-              $self->{'grid_data'}->{'y'}->[$_] = $y2;
-           }
-    }
-
-    #get the right startposition
-    $x1 = $self->{'curr_x_min'} ;
-    $y1 = $self->{'curr_y_max'} -$h/2 ;
-
-    #get the delta values for positioning
-    $height =  $self->{'curr_y_max'} - $self->{'curr_y_min'} ;
-    $delta = ($height) / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-    $y1 -= ($delta/2 );
-
-    #then draw the left labels
-    for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
-       $x2 = $x1 - $self->string_width($font,$fsize,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
-             + $self->{'x_tick_label_width'};
-       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
-                              $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
-    }
-
-    #update the curr_x_min val
-    $self->{'curr_x_min'} = $x1 + $self->{'text_space'} + $self->{'x_tick_label_width'}
-                           + $self->{'tick_len'};
-
-    #finally draw the left ticks
-    $x1 = $self->{'curr_x_min'};
-    $x2 = $self->{'curr_x_min'} - $self->{'tick_len'};
-    $y1 += $h/2;
-    for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
-           $y2 = $y1 - ($delta * $_);
-           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
-           if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
-              $self->{'grid_data'}->{'y'}->[$_] = $y2;
-           }
-    }
-  }
-
-  else {
-    #get the right startposition
-    $x1 = $self->{'curr_x_min'} ;
-    $y1 = $self->{'curr_y_max'} -$h/2 ;
-
-    #get the delta values for positioning
-    $height =  $self->{'curr_y_max'} - $self->{'curr_y_min'} ;
-    $delta = ($height) / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
-    $y1 -= ($delta/2 );
-  
-    if (!defined($self->{'skip_y_ticks'})) {
-       $self->{'skip_y_ticks'} =1;
-    }
-
-    #draw the labels
-    for(0.. int (($self->{'num_datapoints'} - 1) / $self->{'skip_y_ticks'})) {
-       $y2 = $y1 - ($delta) * ($_ * $self->{'skip_y_ticks'}) + $h;
-       $x2 = $x1 - $self->string_width($font,$fsize,$self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}])) #print the Labels right-sided
-             + $self->{'x_tick_label_width'};
-       $self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0,
-                              $self->{f_y_tick}->($data->[0][$_*$self->{'skip_y_ticks'}]));
-    }
-    
-    #update the curr_x_min val
-    $self->{'curr_x_min'} = $x1 + $self->{'text_space'} + $self->{'x_tick_label_width'}
-                           + $self->{'tick_len'};
-  
-    #draw the ticks
-    $x1 = $self->{'curr_x_min'};
-    $x2 = $self->{'curr_x_min'} - $self->{'tick_len'};
-    $y1 += $h/2;
-    for(0..($self->{'num_datapoints'} -1 / $self->{'skip_y_ticks'})) {
-           $y2 = $y1 - ($delta * $_);
-           $self->{'surface'}->line($misccolor,$line_size,$x1,$y2,$x2,$y2);
-           if ($self->{'grid_lines'} or $self->{'x_grid_lines'}) {
-              $self->{'grid_data'}->{'y'}->[$_] = $y2;
-           }
-    }
-  }
-  #now return
-  return 1;
+	$self->SUPER::_draw_y_ticks( $side );
 }
 
 ## finally get around to plotting the data

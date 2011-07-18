@@ -372,14 +372,14 @@ sub _draw_y_ticks {
   my $self = shift;
 
   # let the first guy do his
-  $self->{'sub_0'}->_draw_y_ticks ('left');
+  $self->{'sub_0'}->_draw_y_ticks ( CHART_LEFT );
 
   # and update the other two objects
   $self->_boundary_update ($self->{'sub_0'}, $self);
   $self->_boundary_update ($self->{'sub_0'}, $self->{'sub_1'});
 
   # now draw the other ones
-  $self->{'sub_1'}->_draw_y_ticks ('right');
+  $self->{'sub_1'}->_draw_y_ticks ( CHART_RIGHT );
 
   # and update the other two objects
   $self->_boundary_update ($self->{'sub_1'}, $self);

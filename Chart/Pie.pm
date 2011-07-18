@@ -63,7 +63,7 @@ sub _find_y_scale {
   my $self = shift;
 
   # Disable the y axes
-  $self->{'y_axes'} = undef;
+  $self->{'y_axes'} = 'none';
 
   return;
 }

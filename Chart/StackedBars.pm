@@ -236,20 +236,10 @@ sub _draw_data {
       }
       
       # draw the bar
-      ## y2 and y3 are reversed in some cases because GD's fill
-      ## algorithm is lame
-      if ($data->[$j][$i] > 0) {
         $self->{'surface'}->filled_rectangle($color, 0, $x2, $y3, $x3, $y2);
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [ $x2, $y3, $x3, $y2 ];
-	}
-      }
-      else {
-        $self->{'surface'}->filled_rectangle($color, 0, $x2, $y2, $x3, $y3);
-	if ($self->{'imagemap'}) {
-	  $self->{'imagemap_data'}->[$j][$i] = [ $x2, $y2, $x3, $y3 ];
-	}
-      }
+		if ($self->{'imagemap'}) {
+			$self->{'imagemap_data'}->[$j][$i] = [ $x2, $y3, $x3, $y2 ];
+		}
 
       # now outline it. outline red if the bar had been cut off
       unless ($cut){

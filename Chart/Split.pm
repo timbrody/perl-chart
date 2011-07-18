@@ -182,132 +182,83 @@ sub _find_x_scale {
 }
 
 sub _draw_y_ticks {
-	my $self = shift;
-	my $side = shift || 'left';
+	my( $self, $side ) = @_;
 	my $data = $self->{'dataref'};
 	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
 	my $textcolor = $self->_color_role_to_rgb('text');
 	my $misccolor = $self->_color_role_to_rgb('misc');
-	my @labels = @{$self->{'y_tick_labels'}};
 	my $num_points = $self->{'num_datapoints'};
-	my ($w, $h);
-	my ($x_start, $x, $y_start, $y);
-	my ($height, $label);
-	my ($s, $f);
 	$self->{grid_data}->{'y'} = [];
 	$self->{grid_data}->{'y2'} = [];
 	my $line_size = $self->{line_size};
 
-# find the height
-	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-
 	my $lines = $self->{num_lines};
-
-#get the space between two lines
-	my $delta = $height / $lines;
-
-	my $label_len = $self->{y_tick_label_width};
 
 	return if $lines == 1;
 
-#now draw them
-	if ( $side =~ /^right$/i ) {
-#get the starting point
-		$x_start = $self->{'curr_x_max'};
-		$y_start = $self->{'curr_y_min'};
+	my @labels = 0 .. $lines;
 
-#draw the labels
-		for $label (0..$lines-1) {
-			$x = $x_start - $self->{'text_space'} - $label_len*$w;
-			$y = $y_start + $label*$delta + $delta/2 -$h/2;
-			$self->{'gd_obj'}->string($font, $x, $y, $label, $textcolor);
-		}
+# find the height
+	my $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
 
-#draw the ticks
-		for $label ( 0..$lines) {
-			$x = $x_start - $self->{'text_space'} *2 - $label_len*$w - $self->{'tick_len'};
-			$y = $y_start + $label*$delta;
-			$self->{'gd_obj'} ->line( $x_start-$self->{'text_space'}, $y, $x, $y, $misccolor);
-#add data for grid_lines
-			push @{$self->{grid_data} ->{'y'}}, $y;
-		}
+#get the space between two lines
+	my $delta = $height / @labels;
 
-#update the borders
-		$self->{'curr_x_max'} = $x_start - $self->{'text_space'}*2- $label_len*$w-$self->{'tick_len'};
+	my $label_len = $self->{y_tick_label_width};
 
+	my $axis_width = $self->{tick_len} + 2*$self->{text_space} + $self->{y_tick_label_width};
+	if( $side & CHART_LEFT ) {
+		$self->{'curr_x_min'} += $axis_width;
+	}
+	if( $side & CHART_RIGHT ) {
+		$self->{'curr_x_max'} -= $axis_width;
 	}
 
-	elsif ( $side =~ /^both$/i) {
-#get the starting point
-		$x_start = $self->{'curr_x_min'};
-		$y_start = $self->{'curr_y_min'};
-
-#first the left side
-#draw the labels
-		for $label (0..$lines-1) {
-			$x = $self->{'curr_x_min'}+$self->{'text_space'}*2;
-			$y = $y_start+ $label*$delta + $delta/2 -$h/2;
-			$self->{'gd_obj'}->string($font, $x, $y, $self->{'f_y_tick'}->($label), $textcolor);
+	for(0..$#labels) {
+		my $label = $labels[$_];
+		my $y = $self->{curr_y_max} - $delta * ($#labels - $_);
+		my( $w, $h ) = $self->{surface}->string_bounds( $font, $fsize, $label );
+		if( $side & CHART_LEFT ) {
+			my $x = $self->{curr_x_min};
+			$self->{'surface'}->string($textcolor, $font, $fsize,
+				$x - $axis_width + $self->{y_tick_label_width} - $w, $y - $delta/2 + $h/2, 0,
+				$label
+			);
+			$self->{surface}->line($misccolor, 1,
+				$x - $axis_width, $y,
+				$x, $y
+			);
+			if( $_ == $#labels ) {
+				$self->{surface}->line($misccolor, 1,
+					$x - $axis_width, $self->{curr_y_min},
+					$x, $self->{curr_y_min}
+				);
+			}
 		}
-#draw the ticks
-		for $label (0..$lines) {
-			$x = $x_start + $self->{'text_space'}*2+ $label_len*$w+$self->{'tick_len'};
-			$y = $y_start+ $label*$delta ;
-			$self->{'gd_obj'}->line( $x_start+$self->{'text_space'}, $y, $x, $y, $misccolor);
+		if( $side & CHART_RIGHT ) {
+			my $x = $self->{curr_x_max};
+			$self->{'surface'}->string($textcolor, $font, $fsize,
+				$x + $self->{text_space}, $y - $delta/2 + $h/2, 0,
+				$label
+			);
+			$self->{surface}->line($misccolor, 1,
+				$x, $y,
+				$x + $axis_width, $y
+			);
+			if( $_ == $#labels ) {
+				$self->{surface}->line($misccolor, 1,
+					$x, $self->{curr_y_min},
+					$x + $axis_width, $self->{curr_y_min}
+				);
+			}
 		}
-
-#then the right side
-#get the starting point
-		$x_start = $self->{'curr_x_max'};
-		$y_start = $self->{'curr_y_min'};
-
-#draw the labels
-		for $label (0..$lines-1) {
-			$x = $x_start - $self->{'text_space'} - $label_len*$w;
-			$y = $y_start + $label*$delta + $delta/2 -$h/2;
-			$self->{'gd_obj'}->string($font, $x, $y, $self->{'f_y_tick'}->($label), $textcolor);
-		}
-
-#draw the ticks
-		for $label ( 0..$lines) {
-			$x = $x_start - $self->{'text_space'} *2 - $label_len*$w - $self->{'tick_len'};
-			$y = $y_start + $label*$delta;
-			$self->{'gd_obj'} ->line( $x_start-$self->{'text_space'}, $y, $x, $y, $misccolor);
-#add data for grid_lines
-			push @{$self->{grid_data} ->{'y'}}, $y;
-		}
-#update the borders
-		$self->{'curr_x_min'} += $self->{'text_space'}*2 + $label_len*$w+$self->{'tick_len'};
-		$self->{'curr_x_max'} = $x_start -$self->{'text_space'}*2 - $label_len*$w-$self->{'tick_len'};
-
-	}
-	else {
-
-#get the starting point
-#draw the labels
-		foreach my $i (0..$lines-1) {
-			$label = $labels[$i];
-			($w, $h) = $self->{surface}->string_bounds($font, $fsize, $label);
-			$x = $self->{'curr_x_min'} + $self->{'text_space'}*2;
-			$y = $self->{curr_y_min} + $i*$delta + $delta/2 + $h/2;
-			$self->{'surface'}->string($textcolor, $font, $fsize, $x, $y, 0, $label);
-		}
-#draw the ticks
-		foreach my $i (0..$lines) {
-			$x = $self->{curr_x_min} + $self->{y_tick_label_width} + $self->{'tick_len'} + $self->{'text_space'}*2;
-			$y = $self->{curr_y_min} + $i*$delta;
-			$self->{'surface'}->line($misccolor, $line_size, $self->{curr_x_min}, $y, $x, $y);
-#this is also where we have to draw the grid_lines
-			push @{$self->{grid_data}->{'y'}} , $y;
-		}
-#update the borders
-		$self->{'curr_x_min'} += $self->{'y_tick_label_width'} + $self->{'tick_len'} + $self->{'text_space'}*2;
 	}
 
 #finally return
 	return 1;
 }
 
+# this creates a local environment for Chart::Lines to actually render the data
 sub _draw_data {
 	my $self = shift;
     my $data = $self->{'dataref'};

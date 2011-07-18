@@ -39,85 +39,71 @@ use strict;
 
 ## finally get around to plotting the data
 sub _draw_data {
-  my $self = shift;
-  my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_rgb('misc');
-  my ($x1, $x2, $x3, $y1, $y2, $y3, $mod, $abs_x_max, $abs_y_max, $tan_alpha);
-  my ($width, $height, $delta, $delta_num, $map, $t_x_min, $t_x_max, $t_y_min, $t_y_max);
-  my ($i, $j, $color, $brush, $zero_offset);
-  my $brush_size = $self->{'brush_size'};
-  my $pt_size = $self->{'pt_size'};
+	my $self = shift;
+	my $data = $self->{'dataref'};
+	my $misccolor = $self->_color_role_to_rgb('misc');
+	my ($mod, $abs_x_max, $abs_y_max, $tan_alpha);
+	my ($width, $height, $delta, $delta_num, $map, $t_x_min, $t_x_max, $t_y_min, $t_y_max);
+	my ($i, $j, $color, $brush, $zero_offset);
+	my $brush_size = $self->{'brush_size'};
+	my $pt_size = $self->{'pt_size'};
 
-  # init the imagemap data field if they asked for it
-  if ($self->{'imagemap'}) {
-    $self->{'imagemap_data'} = [];
-  }
-  my @xy; # the xy translation of all data points
+# init the imagemap data field if they asked for it
+	if ($self->{'imagemap'}) {
+		$self->{'imagemap_data'} = [];
+	}
+	my @xy; # the xy translation of all data points
 
-  # get the base x-y values
-  $x1 = $self->{'curr_x_min'};
+# get the base x-y values
+	my $x_origin = $self->{curr_x_min};
+	my $y_origin = $self->{curr_y_max};
 
-  # find the delta value between data points, as well
-  # as the mapping constant
-  $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
-  $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+# find the delta value between data points, as well
+# as the mapping constant
+	$width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
+	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
 
-	# x-axis is always discrete for composite
+# x-axis is always discrete for composite
 	if( $self->{'component'} || !$self->{xy_plot} )
 	{
 		my $delta = $width / ($self->{'num_datapoints'} > 0 ? $self->{'num_datapoints'} : 1);
 		$width -= $delta;
-		$x1 += $delta/2;
+		$x_origin += $delta/2;
 	}
 
-  $delta = $width / ($self->{'num_datapoints'} > 1 ? $self->{'num_datapoints'}-1 : 1);
-  $map = $height / ($self->{'max_val'} - $self->{'min_val'});
+	$delta = $width / ($self->{'num_datapoints'} > 1 ? $self->{'num_datapoints'}-1 : 1);
+	$map = $height / ($self->{'max_val'} - $self->{'min_val'});
 
-  #for a xy-plot, use this delta and maybe an offset for the zero-axes
-  if ($self->{'xy_plot'}) {
-    $delta_num = $width / ($self->{'x_max_val'} - $self->{'x_min_val'});
+	my $d_width = $self->{max_val} - $self->{min_val};
+	$d_width = log($d_width) if $self->{y_axis_scale} eq 'logarithmic';
 
-    if ($self->{'x_min_val'} <= 0 && $self->{'x_max_val'} >= 0) {
-       $zero_offset = abs($self->{'x_min_val'}) * abs($delta_num);
-    }
-    elsif ($self->{'x_min_val'} > 0 || $self->{'x_max_val'} < 0) {
-       $zero_offset =  -$self->{'x_min_val'} * $delta_num;
-    }
-    else {
-       $zero_offset = 0;
-    }
-  }
-  
-  if ($self->{'min_val'} >= 0 ) {
-    $y1 = $self->{'curr_y_max'};
-    $mod = $self->{'min_val'};
-  }
-  elsif ($self->{'max_val'} <= 0) {
-    $y1 = $self->{'curr_y_min'};
-    $mod = $self->{'max_val'};
-  }
-  else {
-    $y1 = $self->{'curr_y_min'} + ($map * $self->{'max_val'});
-    $mod = 0;
-    $self->{'surface'}->line(
-			$misccolor,
-			1,
-			$self->{'curr_x_min'}, $y1,
-			$self->{'curr_x_max'}, $y1);
-  }
+#for a xy-plot, use this delta and maybe an offset for the zero-axes
+	if ($self->{'xy_plot'}) {
+		$delta_num = $width / ($self->{'x_max_val'} - $self->{'x_min_val'});
 
-  # Work out where to place a line marker
-  # = brush_size * 3
-  my $marker_delta = $brush_size * 3;
-  
+		if ($self->{'x_min_val'} <= 0 && $self->{'x_max_val'} >= 0) {
+			$zero_offset = abs($self->{'x_min_val'}) * abs($delta_num);
+		}
+		elsif ($self->{'x_min_val'} > 0 || $self->{'x_max_val'} < 0) {
+			$zero_offset =  -$self->{'x_min_val'} * $delta_num;
+		}
+		else {
+			$zero_offset = 0;
+		}
+	}
+
+# Work out where to place a line marker
+# = brush_size * 3
+	my $marker_delta = $brush_size * 3;
+
 	$self->{'surface'}->clip(
-		$self->{'curr_x_min'}, $self->{'curr_y_min'},
-		$self->{'curr_x_max'}, $self->{'curr_y_max'},
-    );
+			$self->{'curr_x_min'}, $self->{'curr_y_min'},
+			$self->{'curr_x_max'}, $self->{'curr_y_max'},
+			);
 
-	# draw the lines
+# draw the lines
 	for $i (1..$self->{'num_datasets'}) {
-		# get the color for this dataset, and set the brush
+# get the color for this dataset, and set the brush
 		$color = $self->_color_role_to_rgb('dataset'.($i-1));
 
 		my $shape = $self->{'pointStyle' . $i};
@@ -126,9 +112,9 @@ sub _draw_data {
 		push @xy, [];
 
 		my @line;
-		# draw every line for this dataset
+# draw every line for this dataset
 		for $j (0..$self->{'num_datapoints'}-1) {
-			# don't try to draw anything if there's no data
+# don't try to draw anything if there's no data
 			if( !defined($data->[$i][$j]) )
 			{
 				if( scalar(@line) > 1 )
@@ -140,29 +126,35 @@ sub _draw_data {
 				next;
 			}
 
+			my( $x, $y );
 			if ($self->{'xy_plot'}) {
-				$x3 = $x1 + $delta_num * $data->[0][$j] + $zero_offset;
+				$x = $x_origin + $delta_num * $data->[0][$j] + $zero_offset;
 			}
 			else {
-				$x3 = $x1 + ($delta * $j);
+				$x = $x_origin + ($delta * $j);
 			}
-			$y3 = $y1 - (($data->[$i][$j] - $mod) * $map);
+			if( $self->{y_axis_scale} eq 'logarithmic' ) {
+				$y = $self->{curr_y_max} - $height * log($data->[$i][$j] - $self->{min_val}) / $d_width;
+			}
+			else {
+				$y = $self->{curr_y_max} - $height * ($data->[$i][$j] - $self->{min_val}) / $d_width;
+			}
 
-			# store every point in the graph for the imagemap
-			if( $y3 >= $self->{'curr_y_min'} && $y3 < $self->{'curr_y_max'} ) {
-				push @{$xy[$i]}, [$x3,$y3];
+# store every point in the graph for the imagemap
+			if( $y >= $self->{'curr_y_min'} && $y < $self->{'curr_y_max'} ) {
+				push @{$xy[$i]}, [$x,$y];
 			}
 			else {
 				push @{$xy[$i]}, [undef,undef];
 			}
 
-			# now draw the line
-			push @line, [$x3,$y3];
+# now draw the line
+			push @line, [$x,$y];
 
-			# draw the marker
-			if( defined($shape) && $x3 > $marker_index ) {
-				$self->{'surface'}->point($color,$pt_size,$x3,$y3,0,$shape);
-				$marker_index = $x3 + $marker_delta;
+# draw the marker
+			if( defined($shape) && $x > $marker_index ) {
+				$self->{'surface'}->point($color,$pt_size,$x,$y,0,$shape);
+				$marker_index = $x + $marker_delta;
 			}
 		}
 		if( @line > 1 )
@@ -178,7 +170,7 @@ sub _draw_data {
 
 	$self->{'surface'}->reset_clip();
 
-	# and finally box it off
+# and finally box it off
 	if( !defined($self->{'draw_box'}) or $self->{'draw_box'} ne 'none' )
 	{
 		$self->{'surface'}->rectangle(

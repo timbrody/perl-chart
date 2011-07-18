@@ -87,195 +87,190 @@ sub _draw_legend_entry_example {
 
 ## finally get around to plotting the data
 sub _draw_data {
-  my $self = shift;
-  my( $font, $fsize ) = $self->_font_role_to_font( 'series_label' );
-  my $data = $self->{'dataref'};
-  my $misccolor = $self->_color_role_to_rgb('misc');
-  my $white = $self->_color_spec_to_rgb('data_label','white');
-  my $pink = [255,0,255];
-  my ($x1, $x2, $x3, $y1, $y2, $y3);
-  my ($width, $height, $delta1, $delta2, $map, $mod, $cut);
-  my (@LABELS, $i, $j, $color, $neg_color);
-  my $zero_offset = $self->{'zero_offset'} || [];
-  if( ref($zero_offset) eq 'ARRAY' ) {
-	  for(1..$self->{'num_datasets'}) {
-		  $zero_offset->[$_-1] ||= 0;
-	  }
-  } else {
-	  $zero_offset = [$zero_offset];
-	  for(2..$self->{'num_datasets'}) {
-		  $zero_offset->[$_-1] = $zero_offset->[0];
-	  }
-  }
- 
-  my $bar_border_size = $self->{'bar_border_size'};
-  $bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
+	my $self = shift;
+	my( $font, $fsize ) = $self->_font_role_to_font( 'series_label' );
+	my $data = $self->{'dataref'};
+	my $misccolor = $self->_color_role_to_rgb('misc');
+	my $white = [$self->_color_spec_to_rgb('data_label','white')];
+	my $pink = [255,0,255];
+	my ($width, $height, $delta1, $delta2, $map, $mod, $cut);
+	my ($label, @LABELS, $i, $j, $color, $neg_color);
+	my $zero_offset = $self->{'zero_offset'} || [];
+	if( ref($zero_offset) eq 'ARRAY' ) {
+		for(1..$self->{'num_datasets'}) {
+			$zero_offset->[$_-1] ||= 0;
+		}
+	} else {
+		$zero_offset = [$zero_offset];
+		for(2..$self->{'num_datasets'}) {
+			$zero_offset->[$_-1] = $zero_offset->[0];
+		}
+	}
 
-  # init the imagemap data field if they wanted it
-  if ($self->{'imagemap'}) {
-    $self->{'imagemap_data'} = [];
-  }
+	my $bar_border_size = $self->{'bar_border_size'};
+	$bar_border_size = $self->{'line_size'} unless defined $bar_border_size;
 
-  # find both delta values ($delta1 for stepping between different
-  # datapoint names, $delta2 for stepping between datasets for that
-  # point) and the mapping constant
-  $width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
-  $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-  $delta1 = ( $self->{'num_datapoints'} > 0 ) ? $width / ($self->{'num_datapoints'}*1) : $width;    ###
- 
-   $map = ( ($self->{'max_val'} - $self->{'min_val'}) > 0 ) ? $height / ($self->{'max_val'} - $self->{'min_val'}) : $height;
-  if ($self->{'spaced_bars'}) {
-    #OLD: $delta2 = $delta1 / ($self->{'num_datasets'} + 2);
-    $delta2 = ( ($self->{'num_datasets'} + 2) > 0 ) ? $delta1 / ($self->{'num_datasets'} + 2) : $delta1;
-    }
-  else {
-    $delta2 = ( $self->{'num_datasets'} > 0 ) ? $delta1 / $self->{'num_datasets'} : $delta1;
-  }
+# init the imagemap data field if they wanted it
+	if ($self->{'imagemap'}) {
+		$self->{'imagemap_data'} = [];
+	}
 
-  # draw the bars
-  for $i (1..$self->{'num_datasets'}) {   
-    # get the base x-y values
-    $x1 = $self->{'curr_x_min'};
+# find both delta values ($delta1 for stepping between different
+# datapoint names, $delta2 for stepping between datasets for that
+# point) and the mapping constant
+	$width = $self->{'curr_x_max'} - $self->{'curr_x_min'};
+	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+	my $delta = $width / ($self->{num_datapoints} || 1);
 
-    if ($self->{'min_val'} >= 0) {
-      $y1 = $self->{'curr_y_max'} - $map * $zero_offset->[$i-1];
-      $mod = $self->{'min_val'};
-    }
-    elsif ($self->{'max_val'} <= 0) {
-      $y1 = $self->{'curr_y_min'} - $map * $zero_offset->[$i-1];
-      $mod = $self->{'max_val'};
-    }
-    else {
-     $y1 = $self->{'curr_y_min'} + ($map * ($self->{'max_val'} - $zero_offset->[$i-1]));
-     $mod = 0;
-     $self->{'surface'}->line(
-	 		$misccolor,
+	my $d_width = $self->{max_val} - $self->{min_val};
+	$d_width = log($d_width) if $self->{y_axis_scale} eq 'logarithmic';
+
+	my $bar_width = $delta / (($self->{spaced_bars} ? $self->{num_datasets} + 2 : $self->{num_datasets}) || 1);
+	$bar_width = 1 if $bar_width <= 1.0;
+
+# draw the bars
+	for $i (1..$self->{'num_datasets'}) {   
+
+# get the color for this dataset
+		$color = $self->_color_role_to_rgb('dataset'.($i-1));
+		$neg_color = defined($self->{'color_table'}{'neg_dataset'.($i-1)}) ?
+			$self->_color_role_to_rgb('neg_dataset'.($i-1)) :
+				$color;
+
+		my $label_style = $self->{'series_label'.($i-1)};
+
+# draw every bar for this dataset
+		for $j (0..$self->{'num_datapoints'}) {
+			my $value = $data->[$i][$j];
+
+# don't try to draw anything if there's no data
+			if (!defined $value ) {
+				if ($self->{'imagemap'}) {
+					$self->{'imagemap_data'}->[$i][$j] = [undef(), undef(), undef(), undef()];
+				}
+				next;
+			}
+
+			my $direction = $value >= $zero_offset->[$i-1] ? 1 : -1;
+
+			my( $w, $h );
+			if( defined $label_style ) {
+				$label = $self->{'f_y_tick'}->($value - $zero_offset->[$i-1]);
+				($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$label);
+			}
+
+#cut the bars off, if needed
+			my $cut = FALSE;
+			if ($value > $self->{max_val}) {
+				$value = $self->{max_val};
+				$cut = TRUE;
+			}
+			elsif( $value < $self->{min_val} ) {
+				$value = $self->{min_val};
+				$cut = TRUE;
+			}
+
+			# center of all bars
+			my $x1 = $self->{curr_x_min} + $j * $delta + $delta / 2;
+
+			# left-coord of this bar
+			$x1 -= $self->{num_datasets} * $bar_width / 2;
+			$x1 += ($i-1) * $bar_width;
+
+			# right-coord of this bar
+			my $x2 = $x1 + $bar_width;
+
+			# end of bar
+			my $y1;
+			# start of bar
+			my $y2;
+			if( $self->{y_axis_scale} eq 'logarithmic' ) {
+				next if $value == 0; # log(0)
+				$y1 = $self->{curr_y_max} - $height * log($value) / $d_width;
+				$y2 = $self->{curr_y_max}; # offset logarithmic axis?
+			}
+			else {
+				$y1 = $self->{curr_y_max} - $height * ($value-$self->{min_val}) / $d_width;
+				if( $self->{min_val} < 0 ) {
+					$y2 = $self->{curr_y_max} - $height * ($zero_offset->[$i-1]-$self->{min_val}) / $d_width;
+				}
+				else {
+					$y2 = $self->{curr_y_max} - $height * $zero_offset->[$i-1] / $d_width;
+				}
+			}
+
+
+			if ($self->{'imagemap'}) {
+				$self->{'imagemap_data'}->[$i][$j] = [$x1, $y1, $x2, $y2];
+			}
+
+# draw the bar
+			my $c = $direction == 1 ? $color : $neg_color;
+			if( defined( $self->{'f_bar_color'} ) ) {
+				$c = &{$self->{'f_bar_color'}}($data->[$i][$j], $c);
+			}
+			$self->{surface}->filled_rectangle( $c, 0,
+				$x1, $y1,
+				$x2, $y2
+			);
+
+			if( defined $label_style ) {
+				my $y = $y1 + $direction*($w+$self->{text_space});
+				if(
+					$label_style eq 'vertical' &&
+					$y < $self->{curr_y_max} &&
+					$y > $self->{curr_x_min}
+				  ) {
+					push @LABELS, [
+						$white, $font, $fsize,
+						($x1+$x2)/2 - $h/2, $y, ANGLE_VERTICAL,
+						$label
+					];
+				}
+				else {
+					push @LABELS, [
+						$color, $font, $fsize,
+						($x1+$x2)/2 - $w/2, $y1 - $direction*$self->{text_space}, 0,
+						$label
+					];
+				}
+			}
+
+# now outline it. outline red if the bar had been cut off
+			if( $cut )
+			{
+				$self->{'surface'}->rectangle($pink, $bar_border_size, $x1, $y1, $x2, $y2);
+# Line through the bar to indicate it's been cut off
+				my $line_size = int($bar_width/3) || 1;
+				$self->{'surface'}->line($white, $line_size,
+					$x1, ($y1+$y2)/2,
+					$x1, ($y1+$y2)/2+$bar_width
+				);
+				$self->{'surface'}->line($white, $line_size,
+					$x1, ($y1+$y2)/2+$bar_width,
+					$x1, ($y1+$y2)/2+2*$bar_width
+				);
+			}
+			else
+			{
+				$self->{'surface'}->rectangle($misccolor, $bar_border_size, $x1, $y1, $x2, $y2);
+			}
+		}
+	}
+
+# render the series labels after columns, otherwise the text gets overwritten
+	for(@LABELS) {
+		$self->{'surface'}->string(@$_);
+	}
+
+# and finally box it off 
+	$self->{'surface'}->rectangle(
+			$misccolor,
 			1,
-	 		$self->{'curr_x_min'}, $y1,
-			$self->{'curr_x_max'}, $y1);
-    }
-  
-    # get the color for this dataset
-    $color = $self->_color_role_to_rgb('dataset'.($i-1));
-	$neg_color = defined($self->{'color_table'}{'neg_dataset'.($i-1)}) ?
-		$self->_color_role_to_rgb('neg_dataset'.($i-1)) :
-		$color;
-    
-	# Draw a line at the zero_offset for the current data set
-	if( $zero_offset->[$i-1] ) {
-		$self->{'surface'}->line(
-			$color,
-			3,
-			$self->{'curr_x_min'}, $y1,
-			$self->{'curr_x_max'}, $y1);
-	}
-	
-    # draw every bar for this dataset
-    for $j (0..$self->{'num_datapoints'}) {
-    
-      # don't try to draw anything if there's no data
-      if (!defined ($data->[$i][$j])) {
-	  	if ($self->{'imagemap'}) {
-            $self->{'imagemap_data'}->[$i][$j] = [undef(), undef(), undef(), undef()];
-        }
-		next;
-	  }
-		# find the bounds of the rectangle
-        if ($self->{'spaced_bars'}) {
-          $x2 = ($x1 + ($j * $delta1) + ($i * $delta2)); 
-	  	} else {
-	  	  $x2 = $x1 + ($j * $delta1) + (($i - 1) * $delta2);
-	    }
-		$y2 = $y1;
-		$x3 = $x2 + $delta2;
-		# make sure bars are at least 1 pixel wide
-		$x3 = $x2 + 1 if int($x3) eq int($x2);
-		$y3 = $y1 - (($data->[$i][$j] - $mod - $zero_offset->[$i-1]) * $map);
-	
-        #cut the bars off, if needed
-        if ($data->[$i][$j] > $self->{'max_val'}) {
-           $y3 = $y1 - (($self->{'max_val'} - $mod - $zero_offset->[$i-1]) * $map) ;
-           $cut = TRUE;
-        }
-        elsif  ($data->[$i][$j] < $self->{'min_val'}) {
-           $y3 = $y1 - (($self->{'min_val'} - $mod - $zero_offset->[$i-1]) * $map) ;
-           $cut = TRUE;
-        }
-        else {
-           $cut = FALSE;
-        }
-        	
-	# draw the bar
-	## y2 and y3 are reversed in some cases because GD's fill
-	## algorithm is lame
-	my $value = &{$self->{'f_y_tick'}}($data->[$i][$j] - $zero_offset->[$i-1]);
-	my ($w,$h) = $self->{'surface'}->string_bounds($font,$fsize,$value);
-	if( $y3 <= $y2 ) {
-		if( $self->{'f_bar_color'} )
-		{
-			$color = &{$self->{'f_bar_color'}}($data->[$i][$j], $color);
-		}
-	  $self->{'surface'}->filled_rectangle($color, 0, $x2, $y3, $x3, $y2);
-	  if ($self->{'imagemap'}) {
-	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y3, $x3, $y2];
-	  }
-	  if( my $style = $self->{'series_label'}[$i-1] ) {
-		  if( 1 == $style || $self->string_width($font,$fsize,$value) > ($y2-$y3) ) {
-			  push @LABELS, [$color,$font,$fsize,int(($x2+$x3)/2-$w/2),$y3-$h-$self->{'text_space'},0,$value];
-		  } else {
-			  push @LABELS, [$white,$font,$fsize,int(($x2+$x3)/2-$h/2),$y3+$w+$self->{'text_space'},ANGLE_VERTICAL,$value];
-		  }
-	  }
-	}
-	else {
-		if( $self->{'f_bar_color'} )
-		{
-			$neg_color = &{$self->{'f_bar_color'}}($data->[$i][$j], $neg_color);
-		}
-	  $self->{'surface'}->filled_rectangle($neg_color, 0, $x2, $y2, $x3, $y3);
-	  if ($self->{'imagemap'}) {
-	    $self->{'imagemap_data'}->[$i][$j] = [$x2, $y2, $x3, $y3];
-	  }
-	  if( my $style = $self->{'series_label'}[$i-1] ) {
-		  if( 1 == $style || $self->string_width($font,$fsize,$value) > ($y3-$y2) ) {
-			  push @LABELS, [$color,$font,$fsize,int(($x2+$x3)/2-$w/2),$y3+$self->{'text_space'},0,$value];
-		  } else {
-			  push @LABELS, [$white,$font,$fsize,int(($x2+$x3)/2-$h/2),$y3-$self->{'text_space'},ANGLE_VERTICAL,$value];
-		  }
-	  }
-	}
-
-    # now outline it. outline red if the bar had been cut off
-    if( $cut )
-	{
-      $self->{'surface'}->rectangle($pink, $bar_border_size, $x2, $y3, $x3, $y2);
-	  # Line through the bar to indicate it's been cut off
-	  my $line_size = int(($x3-$x2)/3) || 1;
-	  my $up = $y2 > $y3 ? 1 : -1;
-	  $self->{'surface'}->line($white, $line_size, $x2, int(($y3+$y2)/2), $x3, int(($y3+$y2)/2)-$up*($x3-$x2));
-	  $self->{'surface'}->line($white, $line_size, $x2, int(($y3+$y2)/2)+$up*($x3-$x2), $x3, int(($y3+$y2)/2));
-    }
-	else
-	{
-	  $self->{'surface'}->rectangle($misccolor, $bar_border_size, $x2, $y3, $x3, $y2);
-	}
-   }
-  }
-  
-  # render the series labels after columns, otherwise the text gets overwritten
-  for(@LABELS) {
-	$self->{'surface'}->string(@$_);
-  }
-  
-  # and finally box it off 
-  $self->{'surface'}->rectangle(
-		$misccolor,
-		1,
-		$self->{'curr_x_min'},
-		$self->{'curr_y_min'},
-		$self->{'curr_x_max'},
-		$self->{'curr_y_max'});
-
+			$self->{'curr_x_min'},
+			$self->{'curr_y_min'},
+			$self->{'curr_x_max'},
+			$self->{'curr_y_max'});
 }
 
 ## be a good module and return 1

@@ -62,15 +62,21 @@ use constant {
 	TRUE => 1,
 	FALSE => 0,
 	GD_ARC_FILLED => 1,
+
+	CHART_TOP => 1,
+	CHART_RIGHT => 2,
+	CHART_BOTTOM => 4,
+	CHART_LEFT => 8,
 };
 
-@EXPORT = qw( ANGLE_VERTICAL TRUE FALSE );
+@EXPORT = qw( ANGLE_VERTICAL TRUE FALSE CHART_TOP CHART_RIGHT CHART_BOTTOM CHART_LEFT );
 
 use vars qw(%FALSEABLE %NAMED_COLORS $MAX_DATASET_COLORS);
 
 # options that historically took 'false' as boolean FALSE
 %FALSEABLE = map { $_ => 1 } qw(
 	grey_background
+	spaced_bars
 );
 
 %NAMED_COLORS = (
@@ -159,6 +165,9 @@ sub set {
   while(my ($key,$value) = each %opts) {
 	  if ($FALSEABLE{$key} && lc($value) eq 'false') {
 		  $value = FALSE;
+	  }
+	  elsif( $key eq 'y_axis_scale' && $value eq 'log' ) {
+		  $value = 'logarithmic';
 	  }
 	  $self->{$key} = $value;
   }
@@ -576,6 +585,10 @@ sub _init {
   $self->{'curr_x_min'} = 0;
   $self->{'curr_x_max'} = $x-1; # Zero-indexed!
 
+	# define these here to avoid undef warnings
+	$self->{y_tick_label_width} = 0;
+	$self->{x_tick_label_width} = 0;
+
 warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
 
   # use a 10 pixel border around the whole png
@@ -702,7 +715,7 @@ warn "_init: curr_y_max=$self->{'curr_y_max'}" if DEBUG;
   # default value for the labels in a pie chart
   $self->{label_values} = 'percent';
   
-  # default position for the y-axes
+  # default position for the y-axes: both, left, right, none
   $self->{y_axes} = 'left';
 
   # use a logarithmic scale
@@ -858,26 +871,6 @@ sub _check_data {
 		if (scalar(@{$self->{'dataref'}[$_]}) > $self->{'num_datapoints'}) {
 			$self->{'num_datapoints'} = scalar(@{$self->{'dataref'}[$_]});
 		}
-	}
-
-	if( $self->{y_axis_scale} eq "log" )
-	{
-		foreach my $series (@{$self->{'dataref'}}[1..$self->{num_datasets}])
-		{
-			for(@$series)
-			{
-				$_ = (defined $_ && $_ > 0) ?
-					log($_)/log(10) :
-					undef;
-			}
-		}
-		$self->{f_y_tick} = sub {
-			if( int($_[0]) == $_[0] )
-			{
-				return "10<sup>$_[0]</sup>";
-			}
-			return sprintf("10<sup>%.2f</sup>", $_[0] );
-		};
 	}
 
 # find good min and max y-values for the plot
@@ -1280,6 +1273,7 @@ sub _find_y_scale
 	my $maxtickLabelHeight = 0;	# The height in pixels of the tallest tick label.
 	my $prec_test=0;			# Boolean which indicate if precision < |rangeExponent|
 	my $temp_rangeExponent;
+	my ( $rangeExponent, $rangeMantisa );
 
 # Find the datatset minimum and maximum.
 	($d_min, $d_max) = $self->_find_y_range();
@@ -1378,7 +1372,7 @@ sub _find_y_scale
 
 # Descale the range by converting the dataset width into
 # a floating point exponent & mantisa pair.
-		my( $rangeExponent, $rangeMantisa ) = $self->_sepFP( $d_width );
+		( $rangeExponent, $rangeMantisa ) = $self->_sepFP( $d_width );
 		my $rangeMuliplier = 10 ** $rangeExponent;
 
 # Find what tick
@@ -1442,6 +1436,8 @@ sub _find_y_scale
 	$self->{'y_tick_label_height'} = $maxtickLabelHeight > 0 ?
 		$maxtickLabelHeight :
 		0; 
+	$self->{y_tick_interval} = $tickInterval;
+	$self->{y_range_exponent} = $rangeExponent;
 
 #warn "$self: y_tick_label_width = $maxtickLabelWidth";
 
@@ -2289,16 +2285,24 @@ sub _draw_ticks {
   my $self = shift;
 
   #if the user wants an xy_plot, calculate the x-ticks too
-  if ( $self->{'xy_plot'} && ($self->isa('Chart::Lines') || $self->isa('Chart::Points')
-       || $self->isa('Chart::LinesPoints') || $self->isa('Chart::Split') || $self->isa('Chart::ErrorBars')) ) {
+  if ( $self->{'xy_plot'} && ($self->isa('Chart::Lines') || $self->isa('Chart::Points') || $self->isa('Chart::ErrorBars')) ) {
      $self->_draw_x_number_ticks;
   }
   else { # draw the x ticks with strings
      $self->_draw_x_ticks;
   }
 
+  my $side = 0;
+  if( $self->{y_axes} eq 'both' || $self->{y_axes} eq 'left' ) {
+	  $side += CHART_LEFT;
+  }
+  if( $self->{y_axes} eq 'both' || $self->{y_axes} eq 'right' ) {
+	  $side += CHART_RIGHT;
+  }
+  $side = 0 if defined($self->{y_axis}) && $self->{y_axis} eq 'none';
+
   # now the y ticks
-  $self->_draw_y_ticks($self->{'y_axes'});
+  $self->_draw_y_ticks( $side );
   # then return
   return 1;
 }
@@ -2362,7 +2366,7 @@ sub _draw_x_number_ticks {
 #get the start point
 		$y2 = $y1 + $self->{'tick_len'} + $self->{'text_space'} + $h;
 		for (0..$#labels){
-			$label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
+			$label = $labels[$_];
 			$x2 = $x1 + ($delta * $_) - ($self->string_width($font,$fsize,$label)/2) ;
 			$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
 		}
@@ -2372,10 +2376,10 @@ sub _draw_x_number_ticks {
 		$y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - 2*$h - $self->{'tick_len'};
 
 		for (0..$#labels) {
-			$label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
+			$label = $labels[$_];
 			$x2 = $x1 + ($delta * $_) - ($self->string_width($font,$fsize,$label)/2);
 			unless ($_%2) {
-				$y2 = $y1  + $self->{'text_space'} + $self->{'tick_len'};
+				$y2 = $y1 + 2*$h + $self->{'text_space'} + $self->{'tick_len'};
 				$self->{'surface'}->string($textcolor, $font,$fsize, $x2, $y2, 0, $label);
 			}
 			else {
@@ -2388,7 +2392,7 @@ sub _draw_x_number_ticks {
 #get the point for updating later
 		$y1 = $self->{'curr_y_max'} - 2*$self->{'text_space'} - $self->{'x_tick_label_width'} - $self->{'tick_len'};
 		for (0..$#labels){
-			$label = $self->{f_x_tick}->($self->{'x_tick_labels'}[$_]);
+			$label = $labels[$_];
 
 #get the start point
 			$y2 = $y1  + $self->{'tick_len'} + $self->string_width($font,$fsize,$label) + $self->{'text_space'};
@@ -2698,198 +2702,146 @@ trace("curr_*=".join(',',@$self{qw( curr_x_min curr_y_min curr_x_max curr_y_max)
 
 ##  draw the y-ticks and their labels
 sub _draw_y_ticks {
-  my $self = shift;
-  my $side = shift || 'left';
-  my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
-  my $data = $self->{'dataref'};
-  my $textcolor = $self->_color_role_to_rgb($side eq 'left' ? 'y_axis' : 'y_axis2');
-  $textcolor ||= $self->_color_role_to_rgb('text');
-  my $misccolor = $self->_color_role_to_rgb($side eq 'left' ? 'y_axis' : 'y_axis2');
-  $misccolor ||= $self->_color_role_to_rgb('misc');
-  my @labels = @{$self->{'y_tick_labels'}};
-  my ($w, $h);
-  my ($x1, $x2, $y1, $y2);
-  my ($height, $delta, $label);
-  my ($s, $f);
-  
-  if( exists($self->{'y_axis'}) and $self->{'y_axis'} eq 'none' )
-  {
-    return;
-  }
+	my( $self, $side ) = @_;
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+	my $textcolor = $self->_color_role_to_rgb($side & CHART_LEFT ? 'y_axis' : 'y_axis2');
+	$textcolor ||= $self->_color_role_to_rgb('text');
+	my $misccolor = $self->_color_role_to_rgb($side & CHART_LEFT ? 'y_axis' : 'y_axis2');
+	$misccolor ||= $self->_color_role_to_rgb('misc');
+	my @labels = @{$self->{'y_tick_labels'}};
+	my ($height, $delta);
 
-  $self->{grid_data}->{'y'} = [];
-  $self->{grid_data}->{'y2'} = [];
+	return if !$side; # none
 
-  # find out how big the font is
-  #($w, $h) = ($font->width, $font->height);
+	$self->{grid_data}->{'y'} = [];
+	$self->{grid_data}->{'y2'} = [];
 
-  # Check we aren't hard up against the top
-  if( (my $diff = $self->{'curr_y_min'} - ($self->{'y_tick_label_height'}/2)) < 0 ) {
-	  $self->{'curr_y_min'} -= int($diff); # Diff is negative!
-  }
+# Check we aren't hard up against the top
+	if( (my $diff = $self->{'curr_y_min'} - ($self->{'y_tick_label_height'}/2)) < 0 ) {
+		$self->{'curr_y_min'} -= int($diff); # Diff is negative!
+	}
 
-  # figure out which ticks not to draw
-  if ($self->{'min_val'} >= 0) {
-    $s = 0;
-    $f = $#labels;
-  }
-  elsif ($self->{'max_val'} <= 0) {
-    $s = 0;
-    $f = $#labels ;                        # -1 entfernt
-  }
-  else {
-    $s = 0;
-    $f = $#labels;
-  }
+	my $axis_width = $self->{tick_len} + 2*$self->{text_space} + $self->{y_tick_label_width};
+	if( $side & CHART_LEFT ) {
+		$self->{'curr_x_min'} += $axis_width;
+	}
+	if( $side & CHART_RIGHT ) {
+		$self->{'curr_x_max'} -= $axis_width;
+	}
 
-  # now draw them
-  if ($side eq 'right') { # put 'em on the right side of the chart
-    # get the base x-y values, and the delta value
-    $x1 = $self->{'curr_x_max'} - $self->{'tick_len'}
-            - (2 * $self->{'text_space'})
-	    - $self->{'y_tick_label_width'};
-    $y1 = $self->{'curr_y_max'};
-    $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-    $self->{'y_ticks'} = 2 if $self->{'y_ticks'} < 2;
-    $delta = $height / ($self->{'y_ticks'} - 1);
+	if( $self->{y_axis_scale} eq 'logarithmic' )
+	{
+		return $self->_draw_y_logarithmic_ticks( $side );
+	}
 
-    # update the curr_x_max value
-    $self->{'curr_x_max'} = $x1;
+	$height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+	$self->{'y_ticks'} = 2 if $self->{'y_ticks'} < 2;
+	$delta = $height / ($self->{'y_ticks'} - 1);
 
-    # now draw the ticks
-    $x2 = $x1 + $self->{'tick_len'};
-    for ($s..$f) {
-      $y2 = $y1 - ($delta * $_);
-      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
-      if ($self->{'grid_lines'} || $self->{'y2_grid_lines'}) {
-        $self->{'grid_data'}->{'y2'}->[$_] = $y2;
-      }
-    }
-  
-    # update the current x-min value
-    $x1 += $self->{'tick_len'} + (2 * $self->{'text_space'});
-    $y1 -= $self->{'y_tick_label_height'}/2;
+	for(0..$#labels) {
+		my $label = $labels[$_];
+		my $y = $self->{curr_y_max} - $delta * $_;
+		my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
+		if( $side & CHART_LEFT ) {
+			push @{$self->{'grid_data'}->{'y'}}, $y;
+			my $x = $self->{curr_x_min};
+			$self->{surface}->line( $misccolor, 1,
+				$x - $self->{tick_len}, $y,
+				$x, $y,
+			);
+			$x -= $axis_width - $self->{y_tick_label_width} + $w;
+			$self->{'surface'}->string($textcolor, $font, $fsize,
+				$x, $y + $h/2, 0,
+				$label
+			);
+		}
+		if( $side & CHART_RIGHT ) {
+			push @{$self->{'grid_data'}->{'y2'}}, $y;
+			my $x = $self->{curr_x_max};
+			$self->{surface}->line( $misccolor, 1,
+				$x, $y,
+				$x + $self->{tick_len}, $y,
+			);
+			$x += $self->{tick_len} + $self->{text_space};
+			$self->{'surface'}->string($textcolor, $font, $fsize,
+				$x, $y + $h/2, 0,
+				$label
+			);
+		}
+	}
 
-    # now draw the labels
-    for (0..$#labels) {
-      $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
-	  $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
-    }
-  }
-  elsif ($side eq 'both') { # put the ticks on the both sides
-    ## left side first
-
-    # get the base x-y values
-    $x1 = $self->{'curr_x_min'} + $self->{'text_space'};
-    $y1 = $self->{'curr_y_max'} - $self->{'y_tick_label_height'}/2;
-
-    # now draw the labels
-    $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-    $delta = $height / ($self->{'y_ticks'} - 1);
-    for (0..$#labels) {
-      $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
-      $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
-      $self->{'surface'}->string($textcolor,$font,$fsize,$x2,$y2,0,$label);
-    }
-
-    # and update the current x-min value
-    $self->{'curr_x_min'} += (2 * $self->{'text_space'}) 
-                             + $self->{'y_tick_label_width'};
-  
-    # now draw the ticks (skipping the one at zero);
-    $x1 = $self->{'curr_x_min'};
-    $x2 = $self->{'curr_x_min'} + $self->{'tick_len'};
-    $y1 += $self->{'y_tick_label_height'}/2;
-    for ($s..$f) {
-      $y2 = $y1 - ($delta * $_);
-      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
-      if ($self->{'grid_lines'} || $self->{'y_grid_lines'}) {
-        $self->{'grid_data'}->{'y'}->[$_] = $y2;
-      }
-    }
-  
-    # update the current x-min value
-    $self->{'curr_x_min'} += $self->{'tick_len'};
-
-    ## now the right side
-    # get the base x-y values, and the delta value
-    $x1 = $self->{'curr_x_max'} - $self->{'tick_len'}
-            - (2 * $self->{'text_space'})
-	    	- $self->{'y_tick_label_width'};
-    $y1 = $self->{'curr_y_max'};
-    $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-    $delta = $height / ($self->{'y_ticks'} - 1);
-
-    # update the curr_x_max value
-    $self->{'curr_x_max'} = $x1;
-
-    # now draw the ticks (skipping the one at zero);
-    $x2 = $x1 + $self->{'tick_len'};
-    for ($s..$f) {
-      $y2 = $y1 - ($delta * $_);
-      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
-      if ($self->{'grid_lines'} || $self->{'y2_grid_lines'}) {
-        $self->{'grid_data'}->{'y2'}->[$_] = $y2;
-      }
-    }
-  
-    # update the current x-min value
-    $x1 += $self->{'tick_len'} + (2 * $self->{'text_space'});
-    $y1 -= $self->{'y_tick_label_height'}/2;
-
-    # now draw the labels
-    for (0..$#labels) {
-      $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
-      $self->{'surface'}->string($textcolor,$font,$fsize,$x1,$y2,0,$label);
-    }   
-  }
-  else { # just the left side
-    # get the base x-y values
-    $x1 = $self->{'curr_x_min'} + $self->{'text_space'};
-    $y1 = $self->{'curr_y_max'} - $self->{'y_tick_label_height'}/2;
-
-    # now draw the labels
-    $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
-    $self->{'y_ticks'} = 2 if $self->{'y_ticks'} < 2;
-    $delta = $height / ($self->{'y_ticks'} - 1);
-    for (0..$#labels) {
-      $label = $self->{'y_tick_labels'}[$_];
-	  my( $w, $h ) = $self->string_bounds($font,$fsize,$label);
-      $y2 = $y1 - ($delta * $_) + $h;
-      $x2 = $x1 + $self->{'y_tick_label_width'} - $w;
-      $self->{'surface'}->string($textcolor, $font, $fsize, $x2, $y2, 0, $label);
-    }
-
-    # and update the current x-min value
-    $self->{'curr_x_min'} += (2 * $self->{'text_space'}) 
-                             + $self->{'y_tick_label_width'};
-  
-    # now draw the ticks
-    $x1 = $self->{'curr_x_min'};
-    $x2 = $self->{'curr_x_min'} + $self->{'tick_len'};
-    $y1 += $self->{'y_tick_label_height'}/2;
-    for ($s..$f) {
-      $y2 = $y1 - ($delta * $_);
-      $self->{'surface'}->line( $misccolor,1,$x1, $y2, $x2, $y2);
-      if ($self->{'grid_lines'} || $self->{'y_grid_lines'}) {
-        $self->{'grid_data'}->{'y'}->[$_] = $y2;
-      }
-    }
-  
-    # update the current x-min value
-    $self->{'curr_x_min'} += $self->{'tick_len'};
-  }
-
-  # and return
-  return 1;
+# and return
+	return 1;
 }
 
+sub _draw_y_logarithmic_ticks
+{
+	my( $self, $side ) = @_;
+	my $data = $self->{'dataref'};
+	my( $font, $fsize ) = $self->_font_role_to_font( 'tick_label' );
+	my $textcolor = $self->_color_role_to_rgb(
+		$side eq 'left' ? 'y_axis' : 'y_axis2'
+	);
+	$textcolor ||= $self->_color_role_to_rgb('text');
+	my $misccolor = $self->_color_role_to_rgb(
+		$side eq 'left' ? 'y_axis' : 'y_axis2'
+	);
+	$misccolor ||= $self->_color_role_to_rgb('misc');
+
+	my $height = $self->{'curr_y_max'} - $self->{'curr_y_min'};
+	my $scale = log($self->{max_val} - $self->{min_val});
+
+	my @steps;
+	for(0 .. abs($self->{y_range_exponent})) {
+		push @steps, 10 ** ($self->{y_range_exponent} > 0 ? $_ : -$_);
+	}
+
+	my $axis_width = 2 * $self->{text_space} + $self->{y_tick_label_width} + $self->{tick_len};
+
+	my $prev_y = $self->{curr_y_max};
+	foreach my $step (@steps) {
+		my $next_y = $self->{curr_y_max} - $height * log($step*10)/$scale;
+		for(1 .. 9) {
+			my $v = $step * $_;
+			last if $v > $self->{max_val};
+			my $y = $self->{curr_y_max} - $height * log($v)/$scale;
+			push @{$self->{'grid_data'}->{'y'}}, $y;
+			push @{$self->{'grid_data'}->{'y2'}}, $y;
+
+			my( $w, $h ) = $self->{surface}->string_bounds( $font, $fsize, $v );
+
+			if( $v != $step && ($y + $h > $prev_y || $y - $h <= $next_y) ) {
+				next;
+			}
+			$prev_y = $y;
+
+			if( $side & CHART_LEFT ) {
+				my $x = $self->{curr_x_min};
+				$self->{surface}->line( $misccolor, 1,
+					$x - $self->{tick_len}, $y,
+					$x, $y,
+				);
+				$x -= $axis_width - $self->{y_tick_label_width} + $w;
+				$self->{'surface'}->string($textcolor, $font, $fsize,
+					$x, $y + $h/2, 0,
+					$v
+				);
+			}
+			if( $side & CHART_RIGHT ) {
+				my $x = $self->{curr_x_max};
+				$self->{surface}->line( $misccolor, 1,
+					$x, $y,
+					$x + $self->{tick_len}, $y,
+				);
+				$x += $self->{tick_len} + $self->{text_space};
+				$self->{'surface'}->string($textcolor, $font, $fsize,
+					$x, $y + $h/2, 0,
+					$v
+				);
+			}
+		}
+	}
+}
 
 ##  put a grey background on the plot of the data itself
 sub _grey_background
@@ -2956,27 +2908,27 @@ sub _draw_x_grid_lines {
 }
 
 sub _draw_y_grid_lines {
-  my $self = shift;
-  my $grid_role = shift || 'y_grid_lines';
-  my $gridcolor = $self->_color_role_to_rgb($grid_role);
-  my $line_size = $self->{'line_size'};
-  my ($x, $y, $i);
+	my $self = shift;
+	my $grid_role = shift || 'y_grid_lines';
+	my $gridcolor = $self->_color_role_to_rgb($grid_role);
+	my $line_size = $self->{'line_size'};
+	my ($x, $y, $i);
 
-  #Look if I'm an HorizontalBars object
-  if ($self->isa('Chart::HorizontalBars')) {
-      for ($i = 0; $i < ($#{ $self->{grid_data}->{'y'} } ) + 1; $i++) {
-        $y = $self->{grid_data}->{'y'}->[$i];
-        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
-      }
-  } else {
-     # loop for y values is a little different. This is to discard the first
-     # and last values we were given - the top/bottom of the chart area.
-     for ($i = 1; $i < ($#{ $self->{grid_data}->{'y'} } ) + 1  ; $i++) {  ###
-        $y = $self->{grid_data}->{'y'}->[$i];
-        $self->{'surface'}->line( $gridcolor,$line_size,$self->{'curr_x_min'}, $y,  ($self->{'curr_x_max'} - 1), $y);
-     }
-  }
-  return 1;
+#Look if I'm an HorizontalBars object
+	if ($self->isa('Chart::HorizontalBars')) {
+		for ($i = 0; $i < ($#{ $self->{grid_data}->{'y'} } ) + 1; $i++) {
+			$y = $self->{grid_data}->{'y'}->[$i];
+			$self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y, $self->{'curr_x_max'}, $y);
+		}
+	} else {
+# loop for y values is a little different. This is to discard the first
+# and last values we were given - the top/bottom of the chart area.
+		for ($i = 1; $i < @{$self->{grid_data}->{'y'}}; $i++) {
+			$y = $self->{grid_data}->{'y'}->[$i];
+			$self->{'surface'}->line( $gridcolor,$line_size,$self->{'curr_x_min'}, $y, $self->{'curr_x_max'}, $y);
+		}
+	}
+	return 1;
 }
 
 sub _draw_y2_grid_lines {
@@ -2990,7 +2942,7 @@ sub _draw_y2_grid_lines {
   if ($self->isa('Chart::HorizontalBars')) {
       for ($i = 0; $i < ($#{ $self->{grid_data}->{'y'} } ) +1 ; $i++) {
         $y = $self->{grid_data}->{'y'}->[$i];
-        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
+        $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y, $self->{'curr_x_max'}, $y);
       }
   }
   else {
@@ -2998,7 +2950,7 @@ sub _draw_y2_grid_lines {
   # and last values we were given - the top/bottom of the chart area.
    for ($i = 1; $i < $#{ $self->{grid_data}->{'y2'} }; $i++) {
      $y = $self->{grid_data}->{'y2'}->[$i];
-     $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y,  ($self->{'curr_x_max'} - 1), $y);
+     $self->{'surface'}->line( $gridcolor,$line_size,($self->{'curr_x_min'} + 1), $y, $self->{'curr_x_max'}, $y);
    }
   }
   return 1;
