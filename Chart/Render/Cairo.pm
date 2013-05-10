@@ -349,7 +349,7 @@ sub filled_rectangle($$$$$$$)
 	push @$ops,
 		$self->_color( $color ),
 		$self->_line( $thickness ),
-		rectangle => [$x,$y,$x2-$x,$y2-$y];
+		rectangle => [$x,$y,$x2-$x,$y2-$y-1];
 
 	$self->_fill( $ops );
 	$self->_stroke( $ops ) if $thickness != 0;
